@@ -1,207 +1,352 @@
 // tools/attachmentrig.js
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 export function init(scene, uiContainer, onBackToDashboard) {
-    // Local state and functions
+    // Local state
     const clock = new THREE.Clock();
-    let currentMode = 'equipment';
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
+    let currentMode = 'equipment'; // Keep for future expansion if needed
 
     uiContainer.innerHTML = `
         <style>
-            .nav-btn { flex-grow: 1; padding: 12px; border: none; background: transparent; font-size: 16px; font-weight: bold; cursor: pointer; border-bottom: 3px solid transparent; }
-            .nav-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
-            .mode-ui { display: none; }
-            .mode-ui.active { display: flex; flex-wrap: wrap; padding: 10px; gap: 10px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; align-items: center; }
-            .btn { padding: 10px; border-radius: 8px; border: none; background: var(--primary-color); color: white; font-size: 14px; font-weight: bold; cursor: pointer; text-align: center; flex-grow: 1; }
-            .btn.secondary { background: #6c757d; }
-            .btn.tertiary { background: #5a3acc; }
-            input[type="file"] { display: none; }
-            .anim-controls-container { display: none; flex-grow: 2; display: flex; gap: 5px; }
-            .anim-controls-container .btn { padding: 10px 0; min-width: 40px; }
-            #tab-bar { display: flex; overflow-x: auto; padding: 5px; background: #e9e9e9; flex-shrink: 0; }
-            .tab-btn { padding: 8px 16px; border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer; font-size: 14px; flex-shrink: 0; }
-            .tab-btn.active { font-weight: bold; color: var(--primary-color); border-bottom-color: var(--primary-color); }
-            #control-panels { padding: 15px; overflow-y: auto; flex-grow: 1; }
-            .panel { display: none; }
-            .panel.active { display: block; }
-            .control-group { margin-bottom: 15px; }
-            .control-group h3 { margin: 0 0 10px; font-size: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
-            .slider-container { display: grid; grid-template-columns: 20px 1fr 50px; align-items: center; gap: 10px; margin-bottom: 5px; }
-            .wardrobe-item { display: flex; align-items: center; justify-content: space-between; padding: 5px; border-radius: 4px; }
-            .wardrobe-item:nth-child(odd) { background-color: rgba(0,0,0,0.05); }
-            .wardrobe-item label { user-select: none; }
-            .wardrobe-item input[type="checkbox"] { width: 20px; height: 20px; }
+            #attachment-rig-ui {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                color: var(--text-color);
+            }
+            #button-bar {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+                gap: 10px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid var(--border-color);
+            }
+            #tab-container {
+                display: flex;
+                overflow-x: auto;
+                padding: 10px 0;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .tab-btn {
+                background: transparent;
+                border: none;
+                padding: 8px 16px;
+                cursor: pointer;
+                color: var(--secondary-text-color);
+                font-weight: bold;
+                flex-shrink: 0;
+                transition: color 0.2s ease, border-bottom-color 0.2s ease;
+                border-bottom: 2px solid transparent;
+            }
+            .tab-btn.active {
+                color: var(--primary-color);
+                border-bottom-color: var(--primary-color);
+            }
+            #control-panels-container {
+                flex-grow: 1;
+                overflow-y: auto;
+                padding-top: 15px;
+            }
+            .panel {
+                display: none;
+            }
+            .panel.active {
+                display: block;
+            }
+            .control-group {
+                margin-bottom: 15px;
+            }
+            .control-group h3 {
+                margin: 0 0 10px;
+                font-size: 16px;
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 5px;
+            }
+            .slider-container {
+                display: grid;
+                grid-template-columns: 20px 1fr 50px;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 5px;
+            }
+            .attachment-select {
+                width: 100%;
+                padding: 8px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                background-color: var(--panel-bg);
+                color: var(--text-color);
+            }
+            .modal-bg {
+                position: fixed;
+                z-index: 100;
+                left: 0; top: 0;
+                width: 100%; height: 100%;
+                background-color: rgba(0,0,0,0.4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .modal-content {
+                background: var(--panel-bg);
+                border-radius: 24px;
+                padding: 30px;
+                width: 90%;
+                max-width: 400px;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                backdrop-filter: blur(40px);
+                -webkit-backdrop-filter: blur(40px);
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+                transform: scale(0.9);
+                opacity: 0;
+                animation: modal-fade-in 0.3s forwards;
+                color: var(--text-color);
+            }
+            @keyframes modal-fade-in {
+                to { transform: scale(1); opacity: 1; }
+            }
+            .modal-loader {
+                border: 4px solid var(--border-color);
+                border-top: 4px solid var(--primary-color);
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
         </style>
-        <div style="display: flex; flex-direction: column; height: 100%;">
-            <header>
-                <button class="nav-btn active" data-mode="equipment">Equipment</button>
-                <button class="nav-btn" data-mode="wardrobe">Wardrobe</button>
-            </header>
-            <div id="equipment-ui" class="mode-ui active">
-                <button class="btn" id="attach-load-character">Load Character</button>
-                <button class="btn" id="attach-load-asset">Load Asset</button>
-                <button class="btn tertiary" id="attach-load-anim">Load Animation</button>
-                <div class="anim-controls-container">
-                    <button class="btn secondary step-back-btn">&lt;&lt;</button>
-                    <button class="btn secondary play-pause-btn">Pause</button>
-                    <button class="btn secondary step-fwd-btn">&gt;&gt;</button>
-                </div>
-                <button class="btn secondary" id="attach-copy-equipment">Copy Equipment</button>
+        <div id="attachment-rig-ui">
+            <div id="button-bar">
+                <label for="char-input" class="btn">Load Model</label>
+                <input type="file" id="char-input" accept=".glb" hidden>
+
+                <label for="asset-input" class="btn">Load Asset</label>
+                <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
+
+                <label for="anim-input" class="btn">Load Animation</label>
+                <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+                
+                <button class="btn" id="copy-code-btn">Copy</button>
             </div>
-            <div id="wardrobe-ui" class="mode-ui">
-                <button class="btn" id="attach-load-character2">Load Character</button>
-                <button class="btn" id="attach-load-clothing">Load Clothing</button>
-                <div class="anim-controls-container">
-                    <button class="btn secondary step-back-btn">&lt;&lt;</button>
-                    <button class="btn secondary play-pause-btn">Pause</button>
-                    <button class="btn secondary step-fwd-btn">&gt;&gt;</button>
-                </div>
-                <button class="btn secondary" id="attach-copy-wardrobe">Copy Wardrobe</button>
+            
+            <div id="tab-container"></div>
+            
+            <div id="control-panels-container"></div>
+
+            <div class="anim-controls-container" style="display: none; justify-content: space-around; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 1rem;">
+                <button class="btn secondary step-back-btn" style="flex: 1;">&lt;&lt;</button>
+                <button class="btn secondary play-pause-btn" style="flex: 2;">Pause</button>
+                <button class="btn secondary step-fwd-btn" style="flex: 1;">&gt;&gt;</button>
             </div>
-            <div id="tab-bar"></div>
-            <div id="control-panels" style="flex-grow: 1; overflow-y: auto;"></div>
-            <input type="file" id="attach-character-input" accept=".glb">
-            <input type="file" id="attach-asset-input" accept=".glb, .gltf" multiple>
-            <input type="file" id="attach-anim-input" accept=".glb, .gltf">
-            <button class="btn dashboard" id="dashboard-btn" style="margin-top: auto;">Dashboard</button>
+
+            <button class="btn dashboard" id="dashboard-btn" style="margin-top: 1rem;">Dashboard</button>
+        </div>
+
+        <div id="main-modal" class="modal-bg" style="display: none;">
+            <div class="modal-content" id="modal-content"></div>
         </div>
     `;
 
-    // Local state and functions
-    const gltfLoader = new GLTFLoader();
-    const controlPanelsContainer = document.getElementById('control-panels');
-    const tabBarContainer = document.getElementById('tab-bar');
+    // Get UI elements
+    const charInput = document.getElementById('char-input');
+    const assetInput = document.getElementById('asset-input');
+    const animInput = document.getElementById('anim-input');
+    const copyCodeBtn = document.getElementById('copy-code-btn');
     const dashboardBtn = document.getElementById('dashboard-btn');
+    const tabContainer = document.getElementById('tab-container');
+    const controlPanelsContainer = document.getElementById('control-panels-container');
+    const animControlsContainer = document.querySelector('.anim-controls-container');
+    const playPauseBtn = document.querySelector('.play-pause-btn');
+    const stepFwdBtn = document.querySelector('.step-fwd-btn');
+    const stepBackBtn = document.querySelector('.step-back-btn');
+    const mainModal = document.getElementById('main-modal');
+    const modalContent = document.getElementById('modal-content');
+    
+    // Core Three.js dependencies
+    const gltfLoader = new GLTFLoader();
 
-    function loadGLB(files, isCharacter) {
+    // Utility functions
+    const showModal = (contentHTML) => {
+        modalContent.innerHTML = contentHTML;
+        mainModal.style.display = 'flex';
+    };
+
+    const hideModal = () => {
+        mainModal.style.display = 'none';
+        modalContent.innerHTML = '';
+    };
+
+    const resetScene = () => {
+        sceneObjects.forEach(data => scene.remove(data.mesh));
+        sceneObjects.clear();
+        mainCharacter = null;
+        tabContainer.innerHTML = '';
+        controlPanelsContainer.innerHTML = '';
+        animControlsContainer.style.display = 'none';
+        activeObjectId = null;
+    };
+
+    const centerAndOrientModel = (model) => {
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        
+        if (size.y > 0) model.scale.setScalar(1.65 / size.y);
+
+        const scaledBox = new THREE.Box3().setFromObject(model);
+        model.position.y -= scaledBox.min.y;
+    };
+
+    const loadGLB = (files, isCharacter) => {
         if (!files || files.length === 0) return;
+        
         const fileList = Array.from(files);
-        fileList.forEach(file => processFile(file, isCharacter && file === fileList[0]));
-    }
-    
-    function processFile(file, isCharacter) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            gltfLoader.parse(e.target.result, '', (gltf) => {
-                if (isCharacter) resetScene();
-                const model = gltf.scene;
-                model.name = file.name.replace(/\.[^/.]+$/, "");
-                model.userData.fileName = file.name;
-                const box = new THREE.Box3().setFromObject(model);
-                const size = box.getSize(new THREE.Vector3());
-                if (isCharacter) {
-                    if (size.y > 0) model.scale.setScalar(1.65 / size.y);
-                    box.setFromObject(model);
-                    model.position.y -= box.min.y;
-                } else {
-                    if (size.length() > 0) {
-                        const maxDim = Math.max(size.x, size.y, size.z);
-                        model.scale.setScalar(0.5 / maxDim);
-                        model.position.sub(box.getCenter(new THREE.Vector3()));
-                    }
-                }
-                model.traverse(node => { if (node.isMesh) node.castShadow = true; });
-                const objectData = {
-                    mesh: model, bones: [], materials: new Map(), bodyParts: [],
-                    mixer: null, activeAction: null, isPaused: true,
-                };
-                model.traverse(node => {
-                    if (node.isBone) objectData.bones.push(node.name);
-                    if (node.isMesh) {
-                        objectData.bodyParts.push({ name: node.name, mesh: node, isVisible: true });
-                        if (node.material && !objectData.materials.has(node.material.uuid)) {
-                            objectData.materials.set(node.material.uuid, { name: node.material.name || `Material_${objectData.materials.size}`, ref: node.material });
-                        }
-                    }
+        fileList.forEach(file => {
+            showModal(`
+                <h2 class="modal-title">Loading Model</h2>
+                <p>Processing file: ${file.name}</p>
+                <div class="modal-loader"></div>
+            `);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                gltfLoader.parse(e.target.result, '', (gltf) => {
+                    if (isCharacter) resetScene();
+                    const model = gltf.scene;
+                    model.name = file.name.replace(/\.[^/.]+$/, "");
+                    model.userData.fileName = file.name;
+
+                    model.rotation.set(-Math.PI / 2, 0, Math.PI);
+                    centerAndOrientModel(model);
+                    model.traverse(node => { if (node.isMesh) node.castShadow = true; });
+                    
+                    const objectData = {
+                        mesh: model,
+                        bones: [],
+                        mixer: null,
+                        activeAction: null,
+                        isPaused: true,
+                    };
+                    model.traverse(node => {
+                        if (node.isBone) objectData.bones.push(node.name);
+                    });
+                    
+                    sceneObjects.set(model.uuid, objectData);
+                    scene.add(model);
+                    if (isCharacter) mainCharacter = objectData;
+
+                    createUIForObject(objectData);
+                    setActiveObject(model.uuid);
+                    hideModal();
+                }, (error) => {
+                    showModal(`
+                        <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
+                        <p>Failed to parse GLB file: ${error.message}</p>
+                        <button class="btn" onclick="location.reload()">Reload</button>
+                    `);
+                    console.error(error);
                 });
-                sceneObjects.set(model.uuid, objectData);
-                scene.add(model);
-                if (isCharacter) mainCharacter = objectData;
-                createUIForObject(objectData);
-                setActiveObject(model.uuid);
-            });
-        };
-        reader.readAsArrayBuffer(file);
-    }
-    
-    function loadAnimation(file) {
-         if (!file || !mainCharacter) { alert("Please load a character model first!"); return; }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    };
+
+    const loadAnimation = (file) => {
+        if (!file || !mainCharacter) {
+            alert("Please load a character model first!");
+            return;
+        }
+
+        showModal(`
+            <h2 class="modal-title">Loading Animation</h2>
+            <p>Processing file: ${file.name}</p>
+            <div class="modal-loader"></div>
+        `);
+        
         const reader = new FileReader();
         reader.onload = (e) => {
             gltfLoader.parse(e.target.result, '', (gltf) => {
                 const clip = gltf.animations[0];
-                if (!clip) { alert("This GLB file contains no animations."); return; }
-                if (!mainCharacter.mixer) { mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh); }
+                if (!clip) {
+                    showModal(`
+                        <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
+                        <p>This GLB file contains no animations.</p>
+                        <button class="btn" onclick="hideModal()">OK</button>
+                    `);
+                    return;
+                }
+                
+                if (!mainCharacter.mixer) {
+                    mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh);
+                }
                 if (mainCharacter.activeAction) mainCharacter.activeAction.stop();
+
                 const action = mainCharacter.mixer.clipAction(clip);
                 action.setLoop(THREE.LoopRepeat, Infinity).play();
                 mainCharacter.activeAction = action;
                 mainCharacter.isPaused = false;
                 mainCharacter.mixer.timeScale = 1;
-                document.querySelectorAll('.play-pause-btn').forEach(btn => btn.textContent = 'Pause');
-                document.querySelectorAll('.anim-controls-container').forEach(el => el.style.display = 'flex');
+
+                playPauseBtn.textContent = 'Pause';
+                animControlsContainer.style.display = 'flex';
+                hideModal();
+
+            }, (error) => {
+                showModal(`
+                    <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
+                    <p>Failed to load animation file: ${error.message}</p>
+                    <button class="btn" onclick="hideModal()">OK</button>
+                `);
+                console.error(error);
             });
         };
         reader.readAsArrayBuffer(file);
-    }
+    };
 
-    function resetScene() {
-        sceneObjects.forEach(data => scene.remove(data.mesh));
-        sceneObjects.clear();
-        mainCharacter = null;
-        controlPanelsContainer.innerHTML = '';
-        tabBarContainer.innerHTML = '';
-        document.querySelectorAll('.anim-controls-container').forEach(el => el.style.display = 'none');
-    }
-
-    function createUIForObject(objectData) {
+    const createUIForObject = (objectData) => {
         const tab = document.createElement('button');
         tab.className = 'tab-btn';
         tab.textContent = objectData.mesh.name;
         tab.dataset.id = objectData.mesh.uuid;
         tab.onclick = () => setActiveObject(objectData.mesh.uuid);
-        tabBarContainer.appendChild(tab);
+        tabContainer.appendChild(tab);
+
         const panel = document.createElement('div');
         panel.className = 'panel';
         panel.dataset.id = objectData.mesh.uuid;
         controlPanelsContainer.appendChild(panel);
-        renderPanelContent(objectData);
-    }
 
-    function renderPanelContent(objectData) {
-        const { mesh, bones, bodyParts } = objectData;
+        renderPanelContent(objectData);
+    };
+
+    const renderPanelContent = (objectData) => {
+        const { mesh, bones } = objectData;
         const panel = document.querySelector(`.panel[data-id="${mesh.uuid}"]`);
         if (!panel) return;
         
         let panelHTML = '';
 
-        if (currentMode === 'wardrobe' && objectData === mainCharacter && bodyParts.length > 0) {
-            panelHTML += `<div class="control-group"><h3>Default Clothing</h3>`;
-            bodyParts.forEach((part, index) => {
-                if (!part.mesh.geometry.boundingSphere || !part.name) return;
-                panelHTML += `<div class="wardrobe-item">
-                    <label for="part-${mesh.uuid}-${index}">${part.name}</label>
-                    <input type="checkbox" id="part-${mesh.uuid}-${index}" data-part-name="${part.name}" ${part.isVisible ? 'checked' : ''}>
-                </div>`;
-            });
-            panelHTML += `</div>`;
-        }
-
         panelHTML += `<div class="control-group">
             <h3>Position</h3>
-            ${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01)}
-            ${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01)}
-            ${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01)}
+            ${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}
+            ${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}
+            ${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}
             <h3>Rotation (Degrees)</h3>
-            ${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1)}
-            ${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1)}
-            ${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1)}
+            ${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}
+            ${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}
+            ${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}
             <h3>Scale</h3>
-            ${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01)}
+            ${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}
         </div>`;
 
         if (mainCharacter && objectData !== mainCharacter) {
@@ -215,21 +360,27 @@ export function init(scene, uiContainer, onBackToDashboard) {
 
         panel.innerHTML = panelHTML;
         addEventListenersToPanel(panel, objectData);
-    }
+    };
     
-    function addEventListenersToPanel(panel, objectData) {
+    const addEventListenersToPanel = (panel, objectData) => {
         const { mesh } = objectData;
         panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(input => {
             input.addEventListener('input', () => {
-                const getVal = (id) => parseFloat(panel.querySelector(`[id^="${id}-"]`).value);
+                const getVal = (id) => parseFloat(panel.querySelector(`[data-uuid="${objectData.mesh.uuid}"][id^="${id}-"]`).value);
                 mesh.position.set(getVal('pos-x'), getVal('pos-y'), getVal('pos-z'));
                 mesh.rotation.set(THREE.MathUtils.degToRad(getVal('rot-x')), THREE.MathUtils.degToRad(getVal('rot-y')), THREE.MathUtils.degToRad(getVal('rot-z')));
                 const scale = getVal('scale-all');
                 mesh.scale.set(scale, scale, scale);
-                if (input.type === 'range') panel.querySelector(`#${input.id.replace(/-range$/, '-num')}`).value = input.value;
-                if (input.type === 'number') panel.querySelector(`#${input.id.replace(/-num$/, '-range')}`).value = input.value;
+
+                if (input.type === 'range') {
+                    panel.querySelector(`#${input.id.replace(/-range$/, '-num')}`).value = input.value;
+                }
+                if (input.type === 'number') {
+                    panel.querySelector(`#${input.id.replace(/-num$/, '-range')}`).value = input.value;
+                }
             });
         });
+
         const attachmentSelect = panel.querySelector('.attachment-select');
         if (attachmentSelect) {
             attachmentSelect.addEventListener('change', (e) => {
@@ -238,109 +389,84 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 else { const bone = mainCharacter.mesh.getObjectByName(boneName); if (bone) bone.attach(mesh); }
             });
         }
-        if (currentMode === 'wardrobe' && objectData === mainCharacter) {
-            panel.querySelectorAll('.wardrobe-item input[type="checkbox"]').forEach(toggle => {
-                toggle.addEventListener('change', (e) => {
-                    const partName = e.target.dataset.partName;
-                    const part = objectData.bodyParts.find(p => p.name === partName);
-                    if (part) { part.isVisible = e.target.checked; part.mesh.visible = part.isVisible; }
-                });
-            });
-        }
-    }
+    };
 
-    function createSlider(id, label, value, min, max, step) {
-         const uniqueId = `${id}-${Math.random().toString(36).substr(2, 9)}`;
+    const createSlider = (id, label, value, min, max, step, uuid) => {
+         const uniqueId = `${id}-${uuid}`;
          return `<div class="slider-container">
                     <label>${label}</label>
-                    <input type="range" id="${uniqueId}-range" min="${min}" max="${max}" step="${step}" value="${value}">
-                    <input type="number" id="${uniqueId}-num" value="${value}" step="${step}">
+                    <input type="range" id="${uniqueId}-range" data-uuid="${uuid}" min="${min}" max="${max}" step="${step}" value="${value}">
+                    <input type="number" id="${uniqueId}-num" data-uuid="${uuid}" value="${value}" step="${step}">
                 </div>`;
-    }
-    
-    function setActiveObject(id) {
-        activeObjectId = id;
-        document.querySelectorAll('.tab-btn, .panel').forEach(el => el.classList.toggle('active', el.dataset.id === id));
-        if (activeObjectId) renderPanelContent(sceneObjects.get(activeObjectId));
-    }
-
-    function setMode(mode) {
-        currentMode = mode;
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-        document.querySelectorAll('.mode-ui').forEach(u => u.classList.toggle('active', u.id.startsWith(mode)));
-        if (activeObjectId) renderPanelContent(sceneObjects.get(activeObjectId));
-    }
-    
-    function copyEquipment() {
-        if (!activeObjectId || !sceneObjects.has(activeObjectId)) { alert("Select an asset."); return; }
-        const { mesh } = sceneObjects.get(activeObjectId);
-        if (!mesh.parent || !mesh.parent.isBone) { alert("Asset must be attached to a bone."); return; }
-        const { position: pos, rotation: rot, scale: scl } = mesh;
-        const output = `// Transform for ${mesh.name} attached to ${mesh.parent.name}\n` + `object.position.set(${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)});\n` + `object.rotation.set(${rot.x.toFixed(4)}, ${rot.y.toFixed(4)}, ${rot.z.toFixed(4)}); // Radians\n` + `object.scale.set(${scl.x.toFixed(4)}, ${scl.y.toFixed(4)}, ${scl.z.toFixed(4)});`;
-        navigator.clipboard.writeText(output).then(() => {
-            document.getElementById('attach-copy-equipment').textContent = 'Copied!';
-            setTimeout(() => document.getElementById('attach-copy-equipment').textContent = 'Copy Equipment', 1500);
-        });
-    }
-    function copyWardrobe() {
-        if (!mainCharacter) { alert("Load a character first."); return; }
-        const wardrobeData = {
-            hide: mainCharacter.bodyParts.filter(part => !part.isVisible && part.name).map(part => part.name),
-            equip: Array.from(sceneObjects.values()).filter(data => data !== mainCharacter).map(({ mesh }) => ({
-                file: mesh.userData.fileName,
-                attachTo: mesh.parent.isBone ? mesh.parent.name : "scene",
-                position: { x: mesh.position.x.toFixed(4), y: mesh.position.y.toFixed(4), z: mesh.position.z.toFixed(4) },
-                rotation: { x: mesh.rotation.x.toFixed(4), y: mesh.rotation.y.toFixed(4), z: mesh.rotation.z.toFixed(4) },
-                scale: { x: mesh.scale.x.toFixed(4), y: mesh.scale.y.toFixed(4), z: mesh.scale.z.toFixed(4) }
-            }))
-        };
-        navigator.clipboard.writeText(JSON.stringify(wardrobeData, null, 2)).then(() => {
-            document.getElementById('attach-copy-wardrobe').textContent = 'Copied!';
-            setTimeout(() => document.getElementById('attach-copy-wardrobe').textContent = 'Copy Wardrobe', 1500);
-        });
-    }
-    
-    document.querySelectorAll('header .nav-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
-
-    document.getElementById('attach-load-character').onclick = () => document.getElementById('attach-character-input').click();
-    document.getElementById('attach-load-character2').onclick = () => document.getElementById('attach-character-input').click();
-    document.getElementById('attach-load-asset').onclick = () => document.getElementById('attach-asset-input').click();
-    document.getElementById('attach-load-clothing').onclick = () => document.getElementById('attach-asset-input').click();
-    document.getElementById('attach-load-anim').onclick = () => document.getElementById('attach-anim-input').click();
-    document.getElementById('attach-character-input').onchange = (e) => loadGLB(e.target.files, true);
-    document.getElementById('attach-asset-input').onchange = (e) => loadGLB(e.target.files, false);
-    document.getElementById('attach-anim-input').onchange = (e) => loadAnimation(e.target.files[0]);
-    document.getElementById('attach-copy-equipment').onclick = copyEquipment;
-    document.getElementById('attach-copy-wardrobe').onclick = copyWardrobe;
-    
-    const setupAnimListeners = (container) => {
-        const playPauseBtn = container.querySelector('.play-pause-btn');
-        const stepFwdBtn = container.querySelector('.step-fwd-btn');
-        const stepBackBtn = container.querySelector('.step-back-btn');
-        
-        playPauseBtn.addEventListener('click', () => {
-            if (!mainCharacter || !mainCharacter.mixer) return;
-            mainCharacter.isPaused = !mainCharacter.isPaused;
-            mainCharacter.mixer.timeScale = mainCharacter.isPaused ? 0 : 1;
-            document.querySelectorAll('.play-pause-btn').forEach(btn => btn.textContent = mainCharacter.isPaused ? 'Play' : 'Pause');
-        });
-        const step = (amount) => {
-            if (!mainCharacter || !mainCharacter.mixer) return;
-            if (!mainCharacter.isPaused) {
-                mainCharacter.isPaused = true;
-                mainCharacter.mixer.timeScale = 0;
-                document.querySelectorAll('.play-pause-btn').forEach(btn => btn.textContent = 'Play');
-            }
-            mainCharacter.mixer.update(amount);
-        };
-        stepFwdBtn.addEventListener('click', () => step(1/60));
-        stepBackBtn.addEventListener('click', () => step(-1/60));
     };
     
-    document.querySelectorAll('.anim-controls-container').forEach(setupAnimListeners);
+    const setActiveObject = (id) => {
+        activeObjectId = id;
+        document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
+        document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id));
+    };
 
+    const copyEquipment = () => {
+        if (!activeObjectId || !sceneObjects.has(activeObjectId) || !mainCharacter) {
+            alert("Please load a character and select an asset.");
+            return;
+        }
+
+        const { mesh } = sceneObjects.get(activeObjectId);
+        if (!mesh.parent || !mesh.parent.isBone) {
+            alert("Asset must be attached to a bone to copy its transform.");
+            return;
+        }
+        
+        const { position: pos, rotation: rot, scale: scl } = mesh;
+        const output = `// Transform for ${mesh.name} attached to ${mesh.parent.name}\n` +
+                       `object.position.set(${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)});\n` +
+                       `object.rotation.set(${rot.x.toFixed(4)}, ${rot.y.toFixed(4)}, ${rot.z.toFixed(4)}); // Radians\n` +
+                       `object.scale.set(${scl.x.toFixed(4)}, ${scl.y.toFixed(4)}, ${scl.z.toFixed(4)});`;
+        
+        navigator.clipboard.writeText(output).then(() => {
+            alert("Code copied to clipboard!");
+        }).catch(err => {
+            console.error("Failed to copy text: ", err);
+            alert("Failed to copy code.");
+        });
+    };
+
+    // Event Listeners
+    charInput.addEventListener('change', (e) => loadGLB(e.target.files, true));
+    assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
+    animInput.addEventListener('change', (e) => loadAnimation(e.target.files[0]));
+    copyCodeBtn.addEventListener('click', copyEquipment);
     dashboardBtn.addEventListener('click', () => {
         resetScene();
         onBackToDashboard();
     });
+
+    playPauseBtn.addEventListener('click', () => {
+        if (!mainCharacter || !mainCharacter.mixer) return;
+        mainCharacter.isPaused = !mainCharacter.isPaused;
+        mainCharacter.mixer.timeScale = mainCharacter.isPaused ? 0 : 1;
+        playPauseBtn.textContent = mainCharacter.isPaused ? 'Play' : 'Pause';
+    });
+    const step = (amount) => {
+        if (!mainCharacter || !mainCharacter.mixer) return;
+        if (!mainCharacter.isPaused) {
+            mainCharacter.isPaused = true;
+            mainCharacter.mixer.timeScale = 0;
+            playPauseBtn.textContent = 'Play';
+        }
+        mainCharacter.mixer.update(amount);
+    };
+    stepFwdBtn.addEventListener('click', () => step(1/60));
+    stepBackBtn.addEventListener('click', () => step(-1/60));
+    
+    // Animation loop for the attachment rig tool
+    const animateTool = () => {
+        requestAnimationFrame(animateTool);
+        const delta = clock.getDelta();
+        if (mainCharacter && mainCharacter.mixer && !mainCharacter.isPaused) {
+            mainCharacter.mixer.update(delta);
+        }
+    };
+    animateTool();
 }
