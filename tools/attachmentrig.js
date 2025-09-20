@@ -9,9 +9,19 @@ export function init(scene, uiContainer, onBackToDashboard) {
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
-    let currentMode = 'equipment';
 
-    // UI for the tool is now structured with a floating tab bar
+    // Show floating buttons
+    const floatingButtonsContainer = document.getElementById('floating-buttons-container');
+    const loadBtn = document.getElementById('load-btn');
+    const loadDropdown = document.getElementById('load-dropdown');
+    const copyBtn = document.getElementById('copy-btn');
+    const charInput = document.getElementById('char-input');
+    const assetInput = document.getElementById('asset-input');
+    const animInput = document.getElementById('anim-input');
+    
+    floatingButtonsContainer.style.display = 'flex';
+
+    // UI for the tool is now structured for tabs and sliders only
     uiContainer.innerHTML = `
         <style>
             #attachment-rig-ui {
@@ -21,40 +31,17 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 color: var(--text-color);
                 position: relative;
             }
-            #button-bar {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-                gap: 10px;
-                padding-bottom: 10px;
-                border-bottom: 1px solid var(--border-color);
-                z-index: 2; /* Ensure buttons are above the floating tabs */
-            }
-            #button-bar .btn, #button-bar .file-label {
-                padding: 1.0rem;
-                font-size: 0.8rem;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: 4px;
-            }
-            #floating-tab-container {
-                position: absolute;
-                bottom: 40vh; /* Position it above the tool panel */
-                width: 100%;
+            #tab-container {
                 display: flex;
                 overflow-x: auto;
-                background: rgba(28, 28, 30, 0.5); /* Semi-transparent background */
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
-                border-top: 1px solid var(--border-color);
-                padding: 5px;
-                z-index: 1; /* Under the buttons but above the viewer */
+                padding: 10px 0;
+                border-bottom: 1px solid var(--border-color);
+                min-height: 50px;
             }
             .tab-btn {
                 background: transparent;
                 border: none;
-                padding: 10px 16px; 
+                padding: 10px 16px;
                 cursor: pointer;
                 color: var(--secondary-text-color);
                 font-weight: bold;
@@ -68,10 +55,9 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 border-bottom-color: var(--primary-color);
             }
             #control-panels-container {
-                flex-grow: 1; 
+                flex-grow: 1;
                 overflow-y: auto;
                 padding-top: 15px;
-                z-index: 2;
             }
             .panel {
                 display: none;
@@ -149,18 +135,8 @@ export function init(scene, uiContainer, onBackToDashboard) {
             }
         </style>
         <div id="attachment-rig-ui">
-            <div id="button-bar">
-                <label for="char-input" class="file-label">Load Model</label>
-                <input type="file" id="char-input" accept=".glb" hidden>
-                <label for="asset-input" class="file-label">Load Asset</label>
-                <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
-                <label for="anim-input" class="file-label">Load Anim</label>
-                <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
-                <button class="btn" id="copy-code-btn">Copy</button>
-            </div>
-            
+            <div id="tab-container"></div>
             <div id="control-panels-container"></div>
-            
             <div class="anim-controls-container" style="display: none; justify-content: space-around; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 1rem;">
                 <button class="btn secondary step-back-btn" style="flex: 1;">&lt;&lt;</button>
                 <button class="btn secondary play-pause-btn" style="flex: 2;">Pause</button>
@@ -168,19 +144,13 @@ export function init(scene, uiContainer, onBackToDashboard) {
             </div>
         </div>
 
-        <div id="floating-tab-container" class="fade-in"></div>
-
         <div id="main-modal" class="modal-bg" style="display: none;">
             <div class="modal-content" id="modal-content"></div>
         </div>
     `;
 
-    // Get UI elements
-    const charInput = document.getElementById('char-input');
-    const assetInput = document.getElementById('asset-input');
-    const animInput = document.getElementById('anim-input');
-    const copyCodeBtn = document.getElementById('copy-code-btn');
-    const floatingTabContainer = document.getElementById('floating-tab-container');
+    // Get UI elements from the global scope
+    const tabContainer = document.getElementById('tab-container');
     const controlPanelsContainer = document.getElementById('control-panels-container');
     const animControlsContainer = document.querySelector('.anim-controls-container');
     const playPauseBtn = document.querySelector('.play-pause-btn');
@@ -191,6 +161,26 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     // Core Three.js dependencies
     const gltfLoader = new GLTFLoader();
+
+    // Event handlers for the global floating buttons
+    loadBtn.addEventListener('click', () => {
+        loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
+    });
+    copyBtn.addEventListener('click', copyEquipment);
+
+    // Event listeners for the file inputs within the dropdown
+    charInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadGLB(e.target.files, true);
+    });
+    assetInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadGLB(e.target.files, false);
+    });
+    animInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadAnimation(e.target.files[0]);
+    });
 
     // Utility functions
     const showModal = (contentHTML) => {
@@ -207,7 +197,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         sceneObjects.forEach(data => scene.remove(data.mesh));
         sceneObjects.clear();
         mainCharacter = null;
-        floatingTabContainer.innerHTML = '';
+        tabContainer.innerHTML = '';
         controlPanelsContainer.innerHTML = '';
         animControlsContainer.style.display = 'none';
         activeObjectId = null;
@@ -334,7 +324,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         tab.textContent = objectData.mesh.name;
         tab.dataset.id = objectData.mesh.uuid;
         tab.onclick = () => setActiveObject(objectData.mesh.uuid);
-        floatingTabContainer.appendChild(tab);
+        tabContainer.appendChild(tab);
 
         const panel = document.createElement('div');
         panel.className = 'panel';
@@ -417,7 +407,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     const setActiveObject = (id) => {
         activeObjectId = id;
-        document.querySelectorAll('#floating-tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
+        document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
         document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id));
     };
 
@@ -448,11 +438,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     };
 
     // Event Listeners
-    charInput.addEventListener('change', (e) => loadGLB(e.target.files, true));
-    assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
-    animInput.addEventListener('change', (e) => loadAnimation(e.target.files[0]));
-    copyCodeBtn.addEventListener('click', copyEquipment);
-
     playPauseBtn.addEventListener('click', () => {
         if (!mainCharacter || !mainCharacter.mixer) return;
         mainCharacter.isPaused = !mainCharacter.isPaused;
