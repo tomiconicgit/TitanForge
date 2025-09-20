@@ -3,35 +3,42 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
-export function initRigRemovalTool(scene, viewerContainer, currentModel, originalModel) {
-    const toolsContainer = document.getElementById('tools-container');
-    toolsContainer.innerHTML = `
-        <div id="ui-content" style="width: 100%; max-width: 1000px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin: 0 auto;">
-            <div class="card">
-                <h2>1. Load Character</h2>
-                <label for="rig-model-input" class="file-label">Load .glb File</label>
-                <input type="file" id="rig-model-input" accept=".glb" hidden>
-                <div id="rig-status-log" class="status-log">Load a GLB model to start.</div>
+export function init(scene, uiContainer, onBackToDashboard) {
+    let currentModel = null;
+    let originalModel = null;
+
+    uiContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; height: 100%;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; flex-grow: 1;">
+                <div class="card">
+                    <h2>1. Load Character</h2>
+                    <label for="rig-model-input" class="file-label">Load .glb File</label>
+                    <input type="file" id="rig-model-input" accept=".glb" hidden>
+                    <div id="rig-status-log" class="status-log">Load a GLB model to start.</div>
+                </div>
+                <div class="card">
+                    <h2>2. Load Textures</h2>
+                    <label for="rig-texture-input" class="file-label disabled">Load Images</label>
+                    <input type="file" id="rig-texture-input" accept=".png, .jpg, .jpeg" multiple hidden disabled>
+                </div>
+                <div class="card">
+                    <h2>3. Process & Export</h2>
+                    <button id="rig-process-btn" class="btn" disabled>Remove Rig & T-Pose</button>
+                    <button id="rig-export-btn" class="btn" disabled>Export as .glb</button>
+                </div>
             </div>
-            <div class="card">
-                <h2>2. Load Textures</h2>
-                <label for="rig-texture-input" class="file-label disabled">Load Images</label>
-                <input type="file" id="rig-texture-input" accept=".png, .jpg, .jpeg" multiple hidden disabled>
-            </div>
-            <div class="card">
-                <h2>3. Process & Export</h2>
-                <button id="rig-process-btn" class="btn" disabled>Remove Rig & T-Pose</button>
-                <button id="rig-export-btn" class="btn" disabled>Export as .glb</button>
-            </div>
+            <button class="btn dashboard" id="dashboard-btn" style="margin-top: auto;">Dashboard</button>
         </div>
     `;
 
+    // Local state and functions
     const statusLog = document.getElementById('rig-status-log');
     const modelInput = document.getElementById('rig-model-input');
     const textureInput = document.getElementById('rig-texture-input');
     const processBtn = document.getElementById('rig-process-btn');
     const exportBtn = document.getElementById('rig-export-btn');
     const textureLabel = document.querySelector('label[for="rig-texture-input"]');
+    const dashboardBtn = document.getElementById('dashboard-btn');
 
     const logStatus = (message, level = 'info') => {
         statusLog.textContent = message;
@@ -84,19 +91,20 @@ export function initRigRemovalTool(scene, viewerContainer, currentModel, origina
         logStatus("Textures applied successfully.");
     };
     
-    const resetScene = () => {
+    const resetToolState = () => {
         if (currentModel) scene.remove(currentModel);
         currentModel = null; originalModel = null;
         textureInput.disabled = true;
         textureLabel.classList.add('disabled');
         processBtn.disabled = true;
         exportBtn.disabled = true;
+        logStatus("Load a GLB model to start.");
     };
 
     modelInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (!file) return;
-        resetScene();
+        resetToolState();
         logStatus(`Loading model: ${file.name}`);
         
         const reader = new FileReader();
@@ -163,5 +171,10 @@ export function initRigRemovalTool(scene, viewerContainer, currentModel, origina
             logStatus('Export failed. See console.', 'error');
             console.error('An error happened during parsing', error);
         });
+    });
+
+    dashboardBtn.addEventListener('click', () => {
+        resetToolState();
+        onBackToDashboard();
     });
 }
