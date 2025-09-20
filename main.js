@@ -2,6 +2,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// --- ADD THESE IMPORTS ---
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+// --- Rest of your main.js code ---
 let scene, camera, renderer, controls;
 let currentToolInstance = null;
 const viewerContainer = document.getElementById('viewer-container');
