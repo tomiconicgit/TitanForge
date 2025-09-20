@@ -107,6 +107,13 @@
         .btn.dashboard {
             background-color: rgba(60, 60, 67, 0.5);
             color: var(--text-color);
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: auto;
+            padding: 0.5rem 1rem;
+            display: none; /* Controlled by main.js */
+            z-index: 10;
         }
         .btn:disabled {
             opacity: 0.5;
@@ -175,6 +182,7 @@
             <div id="loading-text">Starting up...</div>
             <div id="process-log"></div>
         </div>
+        <button id="dashboard-btn" class="btn dashboard">Dashboard</button>
         <div id="viewer-container"></div>
         <div id="ui-container"></div>
     </div>
