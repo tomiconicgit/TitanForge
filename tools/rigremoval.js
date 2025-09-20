@@ -10,7 +10,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     let objString = null;
     let originalMaterials = new Map();
     let isProcessing = false;
-    let exportFileName = 'model_static.glb'; // Default filename
+    let exportFileName = 'model_static.glb';
 
     uiContainer.innerHTML = `
         <div id="rig-removal-ui-container" style="display: flex; flex-direction: column; height: 100%; justify-content: flex-end;">
@@ -18,7 +18,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 <button id="rename-btn" class="btn" style="width: 100%; margin-bottom: 1rem;">Rename File</button>
                 <button id="export-glb-btn" class="btn" style="width: 100%;">Export as .glb</button>
             </div>
-            <button id="back-to-dashboard-btn" class="btn dashboard" style="width: 100%; margin-top: 1rem;">Dashboard</button>
         </div>
 
         <div id="main-modal" class="modal-bg" style="display: none;">
@@ -40,7 +39,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const exportPanel = document.getElementById('export-panel');
     const exportGlbBtn = document.getElementById('export-glb-btn');
     const renameBtn = document.getElementById('rename-btn');
-    const backToDashboardBtn = document.getElementById('back-to-dashboard-btn');
     const mainModal = document.getElementById('main-modal');
     const modalContent = document.getElementById('modal-content');
     const renameModal = document.getElementById('rename-modal');
@@ -48,7 +46,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const confirmRenameBtn = document.getElementById('confirm-rename-btn');
     const cancelRenameBtn = document.getElementById('cancel-rename-btn');
 
-    // Add modal-specific styles dynamically
     const style = document.createElement('style');
     style.innerHTML = `
         .modal-bg {
@@ -77,6 +74,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
             transform: scale(0.9);
             opacity: 0;
             animation: modal-fade-in 0.3s forwards;
+            color: var(--text-color);
         }
         .modal-title {
             font-size: 1.5rem;
@@ -146,53 +144,33 @@ export function init(scene, uiContainer, onBackToDashboard) {
 
     const convertToGlb = () => {
         if (!objString) {
-            logStatus("No OBJ data to convert.", 'error');
+            console.error("No OBJ data to convert.");
             return;
         }
 
-        logStatus('Rebuilding model...');
-        logProcess("Starting GLB conversion...");
-
         if (currentModel) scene.remove(currentModel);
 
-        setTimeout(() => {
-            try {
-                const deRiggedModel = objLoader.parse(objString);
-                
-                centerAndOrientModel(deRiggedModel);
-                deRiggedModel.rotation.set(0, 0, 0);
+        const deRiggedModel = objLoader.parse(objString);
+        centerAndOrientModel(deRiggedModel);
+        deRiggedModel.rotation.set(0, 0, 0);
 
-                deRiggedModel.traverse(node => {
-                    if (node.isMesh) {
-                        const originalMaterial = originalMaterials.get(node.name);
-                        if (originalMaterial) {
-                            node.material = originalMaterial;
-                        } else {
-                            node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
-                        }
-                    }
-                });
-
-                currentModel = deRiggedModel;
-                scene.add(currentModel);
-
-                logProcess("GLB conversion complete.");
-                exportGlbBtn.disabled = false;
-                logStatus("Model ready for export.");
-            } catch (e) {
-                logProcess("Error during GLB conversion: " + e.message);
-                logStatus("Conversion failed.", 'error');
-                console.error(e);
+        deRiggedModel.traverse(node => {
+            if (node.isMesh) {
+                const originalMaterial = originalMaterials.get(node.name);
+                if (originalMaterial) {
+                    node.material = originalMaterial;
+                } else {
+                    node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
+                }
             }
-        }, 100);
+        });
+
+        currentModel = deRiggedModel;
+        scene.add(currentModel);
+        exportPanel.style.display = 'flex';
     };
 
     // Event Listeners
-    backToDashboardBtn.addEventListener('click', () => {
-        resetToolState();
-        onBackToDashboard();
-    });
-
     renameBtn.addEventListener('click', showRenameModal);
 
     confirmRenameBtn.addEventListener('click', () => {
@@ -223,7 +201,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 link.download = exportFileName;
                 link.click();
                 URL.revokeObjectURL(link.href);
-                logStatus('Export complete!');
                 hideModal();
             }, (error) => {
                 showModal(`
@@ -246,7 +223,10 @@ export function init(scene, uiContainer, onBackToDashboard) {
             <button class="btn dashboard" id="cancel-load-btn">Dashboard</button>
         `);
     
-        document.getElementById('rig-model-input').addEventListener('change', (event) => {
+        const modelInput = document.getElementById('rig-model-input');
+        const cancelLoadBtn = document.getElementById('cancel-load-btn');
+        
+        modelInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
                 loadGLBAndShowProcess(file);
@@ -255,7 +235,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
             }
         });
     
-        document.getElementById('cancel-load-btn').addEventListener('click', () => {
+        cancelLoadBtn.addEventListener('click', () => {
             hideModal();
             onBackToDashboard();
         });
@@ -296,8 +276,9 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 showModal(`
                     <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
                     <p>Failed to parse GLB file. Check the console for details.</p>
-                    <button class="btn" onclick="location.reload()">Reload</button>
+                    <button class="btn" id="reload-btn">Reload</button>
                 `);
+                document.getElementById('reload-btn').addEventListener('click', () => location.reload());
                 console.error(error);
             });
         };
@@ -311,8 +292,11 @@ export function init(scene, uiContainer, onBackToDashboard) {
             <button class="btn" id="remove-rig-btn">Remove Rig</button>
             <button class="btn dashboard" id="cancel-process-btn">Dashboard</button>
         `);
-        document.getElementById('remove-rig-btn').addEventListener('click', removeRig);
-        document.getElementById('cancel-process-btn').addEventListener('click', () => {
+        const removeRigBtn = document.getElementById('remove-rig-btn');
+        const cancelProcessBtn = document.getElementById('cancel-process-btn');
+        
+        removeRigBtn.addEventListener('click', removeRig);
+        cancelProcessBtn.addEventListener('click', () => {
             resetToolState();
             onBackToDashboard();
         });
