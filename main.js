@@ -15,8 +15,8 @@ const toolModules = {
 
 function init3DViewer() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf0f0f0);
-    scene.fog = new THREE.Fog(0xf0f0f0, 10, 50);
+    scene.background = new THREE.Color(0x1c1c1e);
+    scene.fog = new THREE.Fog(0x1c1c1e, 10, 50);
     camera = new THREE.PerspectiveCamera(50, viewerContainer.clientWidth / viewerContainer.clientHeight, 0.1, 1000);
     camera.position.set(0, 1.6, 3.5);
 
@@ -62,7 +62,7 @@ function animate() {
 }
 
 function showMainMenu() {
-    dashboardBtn.style.display = 'none'; // Hide Dashboard button
+    dashboardBtn.style.display = 'none';
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
             <h2>Choose a Tool</h2>
@@ -81,15 +81,16 @@ function showMainMenu() {
 }
 
 async function loadTool(toolName) {
-    dashboardBtn.style.display = 'block'; // Show Dashboard button
+    dashboardBtn.style.display = 'block';
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
         </div>
     `;
     
+    // Clear the scene of any old models
     scene.children.slice().forEach(child => {
-        if (child.type === 'Mesh') {
+        if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh' || child.type === 'Bone') {
             scene.remove(child);
         }
     });
@@ -110,7 +111,7 @@ async function loadTool(toolName) {
     }
 }
 
-dashboardBtn.addEventListener('click', showMainMenu); // Add event listener for the global Dashboard button
+dashboardBtn.addEventListener('click', showMainMenu);
 
 init3DViewer();
 showMainMenu();
