@@ -31,21 +31,36 @@
             width: 100%; height: 100%; overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex; flex-direction: column; background-color: var(--viewer-bg);
+            touch-action: none; /* Prevents unwanted browser gestures on mobile */
         }
         #app-container {
             flex-grow: 1; display: flex; flex-direction: column; position: relative;
         }
         #viewer-container {
-            flex: 1; position: relative; min-height: 200px;
+            flex-grow: 1; /* This will make it fill the top half */
+            position: relative;
+            min-height: 200px;
         }
         #tools-container {
-            flex-shrink: 0; height: 35vh; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            background: var(--ui-bg); border-top: 1px solid var(--border-color);
-            padding: 1rem; overflow-y: auto; display: none; /* Controlled by main.js */
+            flex-shrink: 0;
+            height: 40vh; /* Bottom half for tools */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: var(--ui-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow-y: auto;
+            display: none; /* Controlled by main.js */
         }
         #navbar-container {
-            height: 70px; background: var(--ios-glass-bg); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            display: flex; justify-content: space-around; align-items: center;
+            flex-shrink: 0;
+            height: 8vh; /* A fixed height for the navbar at the bottom */
+            background: var(--ios-glass-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
             border-top: 1px solid var(--ios-glass-border);
         }
         .nav-item {
@@ -78,7 +93,31 @@
             background: rgba(0, 0, 0, 0.05); border-radius: 8px; padding: 10px;
             font-size: 0.8rem; color: #333; overflow-y: scroll;
         }
-        
+
+        /* Tool-specific UI styles */
+        .card {
+            background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem;
+            box-shadow: 0 4px 12px var(--shadow-color); display: flex; flex-direction: column; gap: 0.75rem;
+        }
+        .card h2 {
+            font-size: 1rem; color: var(--text-color); padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .btn, .file-label {
+            display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color);
+            border-radius: 8px; font-size: 0.9rem; font-weight: 500;
+            text-align: center; cursor: pointer; transition: all 0.2s ease;
+            background-color: #e9e9eb; color: var(--text-color);
+        }
+        .btn { border: none; background-color: var(--primary-color); color: white; font-weight: 600; }
+        .btn:disabled, .file-label.disabled {
+            background-color: #e9e9eb !important; color: #8e8e93 !important; cursor: not-allowed; opacity: 0.7;
+        }
+        .status-log {
+            font-size: 0.85rem; text-align: center; color: #636366; padding: 0.5rem;
+            background-color: #e9e9eb; border-radius: 6px; margin-top: auto; transition: all 0.3s ease;
+        }
+        .status-log.error { background-color: #fdd8d6; color: var(--error-color); }
     </style>
 </head>
 <body>
