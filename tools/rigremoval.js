@@ -8,6 +8,7 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 export function init(scene, uiContainer, onBackToDashboard) {
     let currentModel = null;
     let objString = null;
+    let originalMaterials = new Map(); // Store materials for re-application
 
     uiContainer.innerHTML = `
         <div style="display: flex; flex-direction: column; height: 100%;">
@@ -64,6 +65,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         if (currentModel) scene.remove(currentModel);
         currentModel = null;
         objString = null;
+        originalMaterials.clear();
         convertToObjBtn.disabled = true;
         convertToGlbBtn.disabled = true;
         exportBtn.disabled = true;
@@ -93,6 +95,15 @@ export function init(scene, uiContainer, onBackToDashboard) {
         reader.onload = (e) => {
             gltfLoader.parse(e.target.result, '', (gltf) => {
                 const model = gltf.scene;
+
+                // Save original materials before conversion
+                originalMaterials.clear();
+                model.traverse(node => {
+                    if (node.isMesh && node.material) {
+                        // We store the material indexed by its name
+                        originalMaterials.set(node.name, node.material.clone());
+                    }
+                });
 
                 // Set initial orientation
                 model.rotation.set(-Math.PI / 2, 0, Math.PI); 
@@ -166,11 +177,16 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 centerAndOrientModel(deRiggedModel);
                 deRiggedModel.rotation.set(0, 0, 0); // Reset rotation after centering
 
-                // We need to re-apply materials manually since OBJ does not store them
-                // This is a placeholder; a full solution would require mapping and re-applying materials
+                // Re-apply original materials to the new meshes
                 deRiggedModel.traverse(node => {
                     if (node.isMesh) {
-                        node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
+                        const originalMaterial = originalMaterials.get(node.name);
+                        if (originalMaterial) {
+                            node.material = originalMaterial;
+                        } else {
+                            // Fallback to a default material if none found
+                            node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
+                        }
                     }
                 });
 
