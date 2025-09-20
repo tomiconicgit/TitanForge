@@ -11,7 +11,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     let originalMaterials = new Map();
 
     uiContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; height: 100%;">
+        <div class="fade-in" style="display: flex; flex-direction: column; height: 100%;">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; flex-grow: 1;">
                 <div class="card">
                     <h2>1. Load Model</h2>
@@ -27,7 +27,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 <div class="card">
                     <h2>3. Export</h2>
                     <button id="export-glb-btn" class="btn" disabled>Export as .glb</button>
-                    <p style="font-size: 0.8em; text-align: center; color: #636366;">*This will be an unrigged model.</p>
+                    <p style="font-size: 0.8em; text-align: center; color: var(--secondary-text-color);">*This will be an unrigged model.</p>
                 </div>
             </div>
             <button class="btn dashboard" id="dashboard-btn" style="margin-top: auto;">Dashboard</button>
