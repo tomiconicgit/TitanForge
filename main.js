@@ -6,8 +6,8 @@ let scene, camera, renderer, controls;
 let currentToolInstance = null;
 const viewerContainer = document.getElementById('viewer-container');
 const uiContainer = document.getElementById('ui-container');
+const dashboardBtn = document.getElementById('dashboard-btn');
 
-// A dictionary to store the imported tool modules
 const toolModules = {
     rigremoval: () => import('./tools/rigremoval.js'),
     attachmentrig: () => import('./tools/attachmentrig.js'),
@@ -62,6 +62,7 @@ function animate() {
 }
 
 function showMainMenu() {
+    dashboardBtn.style.display = 'none'; // Hide Dashboard button
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
             <h2>Choose a Tool</h2>
@@ -80,6 +81,7 @@ function showMainMenu() {
 }
 
 async function loadTool(toolName) {
+    dashboardBtn.style.display = 'block'; // Show Dashboard button
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
@@ -107,6 +109,8 @@ async function loadTool(toolName) {
         `;
     }
 }
+
+dashboardBtn.addEventListener('click', showMainMenu); // Add event listener for the global Dashboard button
 
 init3DViewer();
 showMainMenu();
