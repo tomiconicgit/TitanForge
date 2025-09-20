@@ -9,73 +9,96 @@ export function init(scene, uiContainer, onBackToDashboard) {
     let currentModel = null;
     let objString = null;
     let originalMaterials = new Map();
+    let isProcessing = false;
 
+    // The entire UI is now modal-based and will be managed dynamically.
     uiContainer.innerHTML = `
-        <div class="fade-in" style="display: flex; flex-direction: column; height: 100%;">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; flex-grow: 1;">
-                <div class="card">
-                    <h2>1. Load Model</h2>
-                    <label for="rig-model-input" class="file-label">Load .glb File</label>
-                    <input type="file" id="rig-model-input" accept=".glb" hidden>
-                    <div id="rig-status-log" class="status-log">Select a rigged GLB file.</div>
-                </div>
-                <div class="card">
-                    <h2>2. Process</h2>
-                    <button id="remove-rig-btn" class="btn" disabled>Remove Rig</button>
-                    <div id="process-log" style="font-size: 0.8em; text-align: left; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; height: 100px; overflow-y: scroll; display: none;"></div>
-                </div>
-                <div class="card">
-                    <h2>3. Export</h2>
-                    <button id="export-glb-btn" class="btn" disabled>Export as .glb</button>
-                    <p style="font-size: 0.8em; text-align: center; color: var(--secondary-text-color);">*This will be an unrigged model.</p>
-                </div>
+        <div id="rig-removal-ui-container" style="display: flex; flex-direction: column; height: 100%; justify-content: flex-end;">
+            <div id="export-panel" class="card" style="display: none; padding: 1rem; text-align: center;">
+                <button id="export-glb-btn" class="btn" style="width: 100%;">Export as .glb</button>
             </div>
-            <button class="btn dashboard" id="dashboard-btn" style="margin-top: auto;">Dashboard</button>
+            <button id="back-to-dashboard-btn" class="btn dashboard" style="width: 100%; margin-top: 1rem;">Dashboard</button>
         </div>
-        
-        <div id="rig-removed-modal" style="display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
-            <div style="background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; text-align: center; border-radius: 10px;">
-                <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;">Rig Removed!</p>
-                <button id="complete-btn" class="btn">Complete</button>
-            </div>
-        </div>
-        
-        <div id="preparing-download-modal" style="display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
-            <div style="background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; text-align: center; border-radius: 10px;">
-                <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;">Preparing Download...</p>
-                <div id="download-spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 0 auto;"></div>
-                <style> @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } </style>
-            </div>
+
+        <div id="main-modal" class="modal-bg" style="display: none;">
+            <div class="modal-content" id="modal-content"></div>
         </div>
     `;
 
-    const statusLog = document.getElementById('rig-status-log');
-    const modelInput = document.getElementById('rig-model-input');
-    const removeRigBtn = document.getElementById('remove-rig-btn');
+    // References to UI elements
+    const exportPanel = document.getElementById('export-panel');
     const exportGlbBtn = document.getElementById('export-glb-btn');
-    const dashboardBtn = document.getElementById('dashboard-btn');
-    const processLogDiv = document.getElementById('process-log');
-    const rigRemovedModal = document.getElementById('rig-removed-modal');
-    const completeBtn = document.getElementById('complete-btn');
-    const preparingDownloadModal = document.getElementById('preparing-download-modal');
+    const backToDashboardBtn = document.getElementById('back-to-dashboard-btn');
+    const mainModal = document.getElementById('main-modal');
+    const modalContent = document.getElementById('modal-content');
+    
+    // Add modal-specific styles dynamically
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .modal-bg {
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: var(--panel-bg);
+            border-radius: 24px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transform: scale(0.9);
+            opacity: 0;
+            animation: modal-fade-in 0.3s forwards;
+        }
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .modal-loader {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes modal-fade-in {
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
 
     const gltfLoader = new GLTFLoader();
     const objExporter = new OBJExporter();
     const objLoader = new OBJLoader();
     const gltfExporter = new GLTFExporter();
 
-    const logStatus = (message, level = 'info') => {
-        statusLog.textContent = message;
-        statusLog.className = 'status-log';
-        if (level === 'error') statusLog.classList.add('error');
+    // Utility functions
+    const showModal = (contentHTML) => {
+        modalContent.innerHTML = contentHTML;
+        mainModal.style.display = 'flex';
     };
 
-    const logProcess = (message) => {
-        processLogDiv.style.display = 'block';
-        const line = document.createElement('div');
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        processLogDiv.appendChild(line);
-        processLogDiv.scrollTop = processLogDiv.scrollHeight;
+    const hideModal = () => {
+        mainModal.style.display = 'none';
+        modalContent.innerHTML = '';
     };
     
     const resetToolState = () => {
@@ -83,11 +106,8 @@ export function init(scene, uiContainer, onBackToDashboard) {
         currentModel = null;
         objString = null;
         originalMaterials.clear();
-        removeRigBtn.disabled = true;
-        exportGlbBtn.disabled = true;
-        processLogDiv.textContent = '';
-        processLogDiv.style.display = 'none';
-        logStatus("Select a rigged GLB file.");
+        exportPanel.style.display = 'none';
+        hideModal();
     };
 
     const centerAndOrientModel = (model) => {
@@ -100,59 +120,19 @@ export function init(scene, uiContainer, onBackToDashboard) {
         model.position.y -= scaledBox.min.y;
     };
 
-    const convertToGlb = () => {
-        if (!objString) {
-            logStatus("No OBJ data to convert.", 'error');
-            return;
-        }
-
-        logStatus('Rebuilding model...');
-        logProcess("Starting GLB conversion...");
-
-        if (currentModel) scene.remove(currentModel);
-
-        setTimeout(() => {
-            try {
-                const deRiggedModel = objLoader.parse(objString);
-                
-                centerAndOrientModel(deRiggedModel);
-                deRiggedModel.rotation.set(0, 0, 0);
-
-                deRiggedModel.traverse(node => {
-                    if (node.isMesh) {
-                        const originalMaterial = originalMaterials.get(node.name);
-                        if (originalMaterial) {
-                            node.material = originalMaterial;
-                        } else {
-                            node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
-                        }
-                    }
-                });
-
-                currentModel = deRiggedModel;
-                scene.add(currentModel);
-
-                logProcess("GLB conversion complete.");
-                exportGlbBtn.disabled = false;
-                logStatus("Model ready for export.");
-            } catch (e) {
-                logProcess("Error during GLB conversion: " + e.message);
-                logStatus("Conversion failed.", 'error');
-                console.error(e);
-            }
-        }, 100);
-    };
-
-    modelInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-        resetToolState();
-        logStatus(`Loading model: ${file.name}`);
+    const loadGLBAndShowProcess = (file) => {
+        showModal(`
+            <h2 class="modal-title">Loading Model</h2>
+            <p>Processing file: ${file.name}</p>
+            <div class="modal-loader"></div>
+        `);
+        
         const reader = new FileReader();
         reader.onload = (e) => {
             gltfLoader.parse(e.target.result, '', (gltf) => {
                 const model = gltf.scene;
 
+                // Save original materials
                 originalMaterials.clear();
                 model.traverse(node => {
                     if (node.isMesh && node.material) {
@@ -160,6 +140,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                     }
                 });
 
+                // Clear the scene and add the new model
                 scene.children.slice().forEach(child => {
                     if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh') {
                         scene.remove(child);
@@ -167,31 +148,49 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 });
                 scene.add(model);
                 
+                // Orient model correctly
                 model.rotation.set(-Math.PI / 2, 0, Math.PI); 
                 centerAndOrientModel(model);
                 currentModel = model;
 
-                removeRigBtn.disabled = false;
-                logStatus("Model loaded. Ready to remove rig.");
+                hideModal(); // Hide modal to show the model
+                showProcessModal(); // Show the next step modal
             }, (error) => {
-                logStatus("Error: Failed to parse GLB file.", 'error');
+                showModal(`
+                    <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
+                    <p>Failed to parse GLB file. Check the console for details.</p>
+                    <button class="btn" onclick="location.reload()">Reload</button>
+                `);
                 console.error(error);
             });
         };
         reader.readAsArrayBuffer(file);
-    });
+    };
 
-    removeRigBtn.addEventListener('click', () => {
-        if (!currentModel) {
-            logStatus("No model loaded.", 'error');
-            return;
-        }
+    const showProcessModal = () => {
+        showModal(`
+            <h2 class="modal-title">Model Loaded</h2>
+            <p>Your model is ready. What would you like to do?</p>
+            <button class="btn" id="remove-rig-btn">Remove Rig</button>
+            <button class="btn dashboard" id="cancel-process-btn">Dashboard</button>
+        `);
+        document.getElementById('remove-rig-btn').addEventListener('click', removeRig);
+        document.getElementById('cancel-process-btn').addEventListener('click', () => {
+            resetToolState();
+            onBackToDashboard();
+        });
+    };
 
-        logStatus('Removing rig...');
-        processLogDiv.style.display = 'block';
-        processLogDiv.textContent = '';
-        logProcess("Starting rig removal process...");
-        
+    const removeRig = () => {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        showModal(`
+            <h2 class="modal-title">Removing Rig</h2>
+            <p>This may take a moment...</p>
+            <div class="modal-loader"></div>
+        `);
+
         setTimeout(() => {
             try {
                 if (currentModel.animations && currentModel.animations.length > 0) {
@@ -201,30 +200,69 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 }
                 
                 objString = objExporter.parse(currentModel);
-                logProcess("Rig removal complete.");
-                removeRigBtn.disabled = true;
-                logStatus("Rig removed. Press 'Complete' to finalize the model.");
-                rigRemovedModal.style.display = 'block';
+                isProcessing = false;
+                completeProcess();
             } catch (e) {
-                logProcess("Error during rig removal: " + e.message);
-                logStatus("Rig removal failed.", 'error');
+                isProcessing = false;
+                showModal(`
+                    <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
+                    <p>Rig removal failed: ${e.message}</p>
+                    <button class="btn" id="error-close-btn">Close</button>
+                `);
+                document.getElementById('error-close-btn').addEventListener('click', () => {
+                    hideModal();
+                });
                 console.error(e);
             }
-        }, 100);
-    });
+        }, 500); // Small delay for visual effect
+    };
+    
+    const completeProcess = () => {
+        showModal(`
+            <h2 class="modal-title">Rig Removed!</h2>
+            <p>The model is now de-rigged and ready to be exported.</p>
+            <button class="btn" id="complete-btn">Complete</button>
+        `);
+        document.getElementById('complete-btn').addEventListener('click', finalizeModel);
+    };
 
-    completeBtn.addEventListener('click', () => {
-        rigRemovedModal.style.display = 'none';
-        convertToGlb();
+    const finalizeModel = () => {
+        hideModal();
+        if (currentModel) scene.remove(currentModel);
+
+        const deRiggedModel = objLoader.parse(objString);
+        centerAndOrientModel(deRiggedModel);
+        deRiggedModel.rotation.set(0, 0, 0);
+
+        deRiggedModel.traverse(node => {
+            if (node.isMesh) {
+                const originalMaterial = originalMaterials.get(node.name);
+                if (originalMaterial) {
+                    node.material = originalMaterial;
+                } else {
+                    node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
+                }
+            }
+        });
+
+        currentModel = deRiggedModel;
+        scene.add(currentModel);
+        exportPanel.style.display = 'flex';
+    };
+
+    // Event Listeners
+    backToDashboardBtn.addEventListener('click', () => {
+        resetToolState();
+        onBackToDashboard();
     });
 
     exportGlbBtn.addEventListener('click', () => {
-        if (!currentModel) {
-            logStatus("No model to export.", 'error');
-            return;
-        }
+        if (!currentModel) return;
         
-        preparingDownloadModal.style.display = 'block';
+        showModal(`
+            <h2 class="modal-title">Preparing Download</h2>
+            <div class="modal-loader"></div>
+        `);
 
         setTimeout(() => {
             gltfExporter.parse(currentModel, (result) => {
@@ -234,18 +272,39 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 link.download = 'model_static.glb';
                 link.click();
                 URL.revokeObjectURL(link.href);
-                logStatus('Export complete!');
-                preparingDownloadModal.style.display = 'none';
+                hideModal();
             }, (error) => {
-                logStatus('Export failed. See console.', 'error');
+                showModal(`
+                    <h2 class="modal-title" style="color: var(--error-color);">Export Failed</h2>
+                    <p>An error occurred during export. See the console for details.</p>
+                    <button class="btn" id="error-close-btn">Close</button>
+                `);
+                document.getElementById('error-close-btn').addEventListener('click', hideModal);
                 console.error('An error happened during parsing', error);
-                preparingDownloadModal.style.display = 'none';
             }, { binary: true });
-        }, 500);
+        }, 500); // Small delay to show the modal
     });
 
-    dashboardBtn.addEventListener('click', () => {
-        resetToolState();
+    // Start the process by showing the initial load modal
+    showModal(`
+        <h2 class="modal-title">Load GLB</h2>
+        <p>Choose a GLB file to remove its skeletal rig.</p>
+        <label for="rig-model-input" class="btn">Choose File</label>
+        <input type="file" id="rig-model-input" accept=".glb" hidden>
+        <button class="btn dashboard" id="cancel-load-btn">Dashboard</button>
+    `);
+
+    document.getElementById('rig-model-input').addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            loadGLBAndShowProcess(file);
+        } else {
+            hideModal();
+        }
+    });
+
+    document.getElementById('cancel-load-btn').addEventListener('click', () => {
+        hideModal();
         onBackToDashboard();
     });
 }
