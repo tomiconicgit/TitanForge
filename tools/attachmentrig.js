@@ -29,6 +29,14 @@ export function init(scene, uiContainer, onBackToDashboard) {
             #button-bar .btn, #button-bar .file-label {
                 padding: 0.6rem;
                 font-size: 0.8rem;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+            }
+            .button-icon {
+                font-size: 1.2rem;
             }
             #tab-container {
                 display: flex;
@@ -134,13 +142,22 @@ export function init(scene, uiContainer, onBackToDashboard) {
         </style>
         <div id="attachment-rig-ui">
             <div id="button-bar">
-                <label for="char-input" class="file-label">Load Model</label>
+                <label for="char-input" class="file-label">
+                    <span class="button-icon">📁</span>
+                    <span>Model</span>
+                </label>
                 <input type="file" id="char-input" accept=".glb" hidden>
 
-                <label for="asset-input" class="file-label">Load Asset</label>
+                <label for="asset-input" class="file-label">
+                    <span class="button-icon">📦</span>
+                    <span>Asset</span>
+                </label>
                 <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
 
-                <label for="anim-input" class="file-label">Load Animation</label>
+                <label for="anim-input" class="file-label">
+                    <span class="button-icon">🎬</span>
+                    <span>Anim</span>
+                </label>
                 <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
                 
                 <button class="btn" id="copy-code-btn">Copy</button>
