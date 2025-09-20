@@ -22,8 +22,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                     <input type="file" id="rig-texture-input" accept=".png, .jpg, .jpeg" multiple hidden disabled>
                 </div>
                 <div class="card">
-                    <h2>3. Process & Export</h2>
-                    <button id="rig-process-btn" class="btn" disabled>Remove Rig & T-Pose</button>
+                    <h2>3. Export</h2>
                     <button id="rig-export-btn" class="btn" disabled>Export as .glb</button>
                 </div>
             </div>
@@ -34,7 +33,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const statusLog = document.getElementById('rig-status-log');
     const modelInput = document.getElementById('rig-model-input');
     const textureInput = document.getElementById('rig-texture-input');
-    const processBtn = document.getElementById('rig-process-btn');
     const exportBtn = document.getElementById('rig-export-btn');
     const textureLabel = document.querySelector('label[for="rig-texture-input"]');
     const dashboardBtn = document.getElementById('dashboard-btn');
@@ -53,7 +51,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
         originalModel = null;
         textureInput.disabled = true;
         textureLabel.classList.add('disabled');
-        processBtn.disabled = true;
         exportBtn.disabled = true;
         logStatus("Load a GLB model to start.");
     };
@@ -70,7 +67,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         logStatus(`Applying ${textureFiles.length} texture(s)...`);
         const materials = new Set();
         model.traverse(node => {
-            if ((node.isMesh || node.isSkinnedMesh) && node.material) {
+            if (node.isMesh && node.material) {
                 materials.add(node.material);
             }
         });
@@ -110,23 +107,57 @@ export function init(scene, uiContainer, onBackToDashboard) {
         reader.onload = (e) => {
             gltfLoader.parse(e.target.result, '', (gltf) => {
                 const model = gltf.scene;
-                const box = new THREE.Box3().setFromObject(model);
-                const size = box.getSize(new THREE.Vector3());
-                if (size.y > 0) model.scale.setScalar(1.65 / size.y);
-                const scaledBox = new THREE.Box3().setFromObject(model);
-                model.position.y -= scaledBox.min.y;
+
+                // Create a new, clean model group to hold the de-rigged meshes
+                const staticModel = new THREE.Group();
+
+                // Traverse the original model and process its meshes
                 model.traverse(node => {
+                    if (node.isSkinnedMesh) {
+                        // Extract the geometry and material
+                        const geometry = node.geometry;
+                        const material = node.material.clone();
+                        
+                        // Create a new standard Mesh
+                        const newMesh = new THREE.Mesh(geometry, material);
+
+                        // Copy the world transformation to preserve its original location in T-pose
+                        const worldPosition = new THREE.Vector3();
+                        const worldQuaternion = new THREE.Quaternion();
+                        const worldScale = new THREE.Vector3();
+                        node.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+                        
+                        newMesh.position.copy(worldPosition);
+                        newMesh.quaternion.copy(worldQuaternion);
+                        newMesh.scale.copy(worldScale);
+                        
+                        // Add the new mesh to the static group
+                        staticModel.add(newMesh);
+                    } else if (node.isMesh && !node.isSkinnedMesh) {
+                        // If it's a regular mesh, just clone it and add it
+                        staticModel.add(node.clone());
+                    }
+                });
+                
+                // Set the model for the scene and export
+                currentModel = staticModel;
+                scene.add(currentModel);
+
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const size = box.getSize(new THREE.Vector3());
+                if (size.y > 0) currentModel.scale.setScalar(1.65 / size.y);
+                const scaledBox = new THREE.Box3().setFromObject(currentModel);
+                currentModel.position.y -= scaledBox.min.y;
+                currentModel.traverse(node => {
                     if (node.isMesh) {
                         node.castShadow = true;
                     }
                 });
-                originalModel = model;
-                currentModel = model;
-                scene.add(model);
-                processBtn.disabled = false;
+
+                exportBtn.disabled = false;
                 textureInput.disabled = false;
                 textureLabel.classList.remove('disabled');
-                logStatus("Model loaded. You can now load textures.");
+                logStatus("Model loaded and de-rigged. You can now load textures or export.");
             }, (error) => {
                 logStatus("Error: Failed to parse GLB file.", 'error');
                 console.error(error);
@@ -139,58 +170,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
         if (!currentModel) return;
         const files = Array.from(event.target.files);
         if (files.length > 0) applyTextures(currentModel, files);
-    });
-
-    processBtn.addEventListener('click', () => {
-        if (!originalModel) return;
-        logStatus('Processing: Removing rig and T-Posing...');
-
-        // Directly modify the original model instead of creating a new one
-        const meshesToKeep = [];
-        const bonesToRemove = [];
-
-        originalModel.traverse(node => {
-            if (node.isSkinnedMesh) {
-                // Remove the skeleton and bind matrix properties
-                node.bindMode = null;
-                node.bindMatrix = null;
-                node.bindMatrixInverse = null;
-                node.skeleton = null;
-                
-                // Convert SkinnedMesh to a standard Mesh
-                const oldGeometry = node.geometry;
-                const newMesh = new THREE.Mesh(oldGeometry, node.material);
-                newMesh.position.copy(node.position);
-                newMesh.rotation.copy(node.rotation);
-                newMesh.scale.copy(node.scale);
-
-                // We need to detach it from the parent and re-add it to avoid issues.
-                // This is the cleanest way to fully "de-rig" it.
-                if (node.parent) {
-                    node.parent.remove(node);
-                    originalModel.add(newMesh); // Re-add the new mesh to the main model group
-                }
-                
-                meshesToKeep.push(newMesh);
-            }
-            else if (node.isMesh) {
-                meshesToKeep.push(node);
-            }
-            else if (node.isBone) {
-                bonesToRemove.push(node);
-            }
-        });
-
-        // Remove all bone objects from the scene graph
-        bonesToRemove.forEach(bone => {
-            if (bone.parent) {
-                bone.parent.remove(bone);
-            }
-        });
-
-        logStatus('Rig removed. Ready to export.');
-        exportBtn.disabled = false;
-        processBtn.disabled = true;
     });
 
     exportBtn.addEventListener('click', () => {
