@@ -2,13 +2,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// --- Shared 3D Scene and State ---
 let scene, camera, renderer, controls;
-let currentModel = null;
-let originalModel = null;
-let currentTool = null;
+let currentToolInstance = null;
 const viewerContainer = document.getElementById('viewer-container');
-const toolsContainer = document.getElementById('tools-container');
+const uiContainer = document.getElementById('ui-container');
+
+// A dictionary to store the imported tool modules
+const toolModules = {
+    rigremoval: () => import('./tools/rigremoval.js'),
+    attachmentrig: () => import('./tools/attachmentrig.js'),
+};
 
 function init3DViewer() {
     scene = new THREE.Scene();
@@ -48,7 +51,7 @@ function init3DViewer() {
         renderer.setSize(width, height);
     });
     resizeObserver.observe(viewerContainer);
-
+    
     animate();
 }
 
@@ -58,51 +61,54 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// A dictionary to store the imported tool modules
-const toolModules = {
-    rigremoval: () => import('./tools/rigremoval.js'),
-    attachmentrig: () => import('./tools/attachmentrig.js'),
-};
+function showMainMenu() {
+    uiContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
+            <h2>Choose a Tool</h2>
+            <button class="btn" id="rigremoval-btn">Rig Removal Tool</button>
+            <button class="btn" id="attachmentrig-btn">Attachment Rig Tool</button>
+        </div>
+    `;
 
-async function switchTool(toolName) {
-    if (currentTool === toolName) return;
+    document.getElementById('rigremoval-btn').addEventListener('click', () => {
+        loadTool('rigremoval');
+    });
 
-    // Remove active state from all nav items
-    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-    // Set active state on the current tool's nav item
-    document.querySelector(`.nav-item[data-tool="${toolName}"]`).classList.add('active');
+    document.getElementById('attachmentrig-btn').addEventListener('click', () => {
+        loadTool('attachmentrig');
+    });
+}
 
-    // Show the tools container
-    toolsContainer.style.display = 'flex';
+async function loadTool(toolName) {
+    uiContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+            <p>Loading tool: ${toolName}...</p>
+        </div>
+    `;
+    
+    // Clear the current scene
+    scene.children.slice().forEach(child => {
+        if (child.type === 'Mesh') {
+            scene.remove(child);
+        }
+    });
 
     try {
-        // Dynamically import the selected tool
-        const { initRigRemovalTool, initAttachmentRigTool } = await toolModules[toolName]();
+        const module = await toolModules[toolName]();
+        currentToolInstance = module;
+        // The init function will populate the UI and handle tool-specific logic
+        module.init(scene, uiContainer, showMainMenu);
 
-        // Clear the previous tool's UI
-        toolsContainer.innerHTML = '';
-        
-        // Initialize the new tool
-        if (toolName === 'rigremoval') {
-            initRigRemovalTool(scene, viewerContainer, currentModel, originalModel);
-        } else if (toolName === 'attachmentrig') {
-            initAttachmentRigTool(scene, viewerContainer);
-        }
-
-        currentTool = toolName;
     } catch (error) {
         console.error(`Failed to load or initialize tool: ${toolName}`, error);
-        toolsContainer.innerHTML = '<p>Error loading tool. Please try again.</p>';
+        uiContainer.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <p style="color: red;">Error loading tool. Please try again.</p>
+                <button class="btn" onclick="location.reload();">Reload</button>
+            </div>
+        `;
     }
 }
 
-// Attach event listeners to the navigation bar
-document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-        const toolName = item.getAttribute('data-tool');
-        switchTool(toolName);
-    });
-});
-
 init3DViewer();
-switchTool('rigremoval');
+showMainMenu();
