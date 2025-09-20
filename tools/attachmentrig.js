@@ -9,7 +9,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
-    let currentMode = 'equipment'; // Keep for future expansion if needed
+    let currentMode = 'equipment'; // Kept for future expansion if needed
 
     uiContainer.innerHTML = `
         <style>
@@ -21,10 +21,14 @@ export function init(scene, uiContainer, onBackToDashboard) {
             }
             #button-bar {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
                 gap: 10px;
                 padding-bottom: 10px;
                 border-bottom: 1px solid var(--border-color);
+            }
+            #button-bar .btn, #button-bar .file-label {
+                padding: 0.6rem;
+                font-size: 0.8rem;
             }
             #tab-container {
                 display: flex;
@@ -35,20 +39,21 @@ export function init(scene, uiContainer, onBackToDashboard) {
             .tab-btn {
                 background: transparent;
                 border: none;
-                padding: 8px 16px;
+                padding: 10px 16px; /* Slightly larger padding for vertical sizing */
                 cursor: pointer;
                 color: var(--secondary-text-color);
                 font-weight: bold;
                 flex-shrink: 0;
                 transition: color 0.2s ease, border-bottom-color 0.2s ease;
                 border-bottom: 2px solid transparent;
+                font-size: 0.9rem;
             }
             .tab-btn.active {
                 color: var(--primary-color);
                 border-bottom-color: var(--primary-color);
             }
             #control-panels-container {
-                flex-grow: 1;
+                flex-grow: 1; /* This is the key change */
                 overflow-y: auto;
                 padding-top: 15px;
             }
@@ -129,13 +134,13 @@ export function init(scene, uiContainer, onBackToDashboard) {
         </style>
         <div id="attachment-rig-ui">
             <div id="button-bar">
-                <label for="char-input" class="btn">Load Model</label>
+                <label for="char-input" class="file-label">Load Model</label>
                 <input type="file" id="char-input" accept=".glb" hidden>
 
-                <label for="asset-input" class="btn">Load Asset</label>
+                <label for="asset-input" class="file-label">Load Asset</label>
                 <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
 
-                <label for="anim-input" class="btn">Load Animation</label>
+                <label for="anim-input" class="file-label">Load Animation</label>
                 <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
                 
                 <button class="btn" id="copy-code-btn">Copy</button>
@@ -395,7 +400,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
          const uniqueId = `${id}-${uuid}`;
          return `<div class="slider-container">
                     <label>${label}</label>
-                    <input type="range" id="${uniqueId}-range" data-uuid="${uuid}" min="${min}" max="${max}" step="${step}" value="${value}">
+                    <input type="range" id="${uniqueId}-range" data-uuid="${uuid}" min="${min}" max="${max}" step="${step}" value="${value}" style="flex-grow: 1;">
                     <input type="number" id="${uniqueId}-num" data-uuid="${uuid}" value="${value}" step="${step}">
                 </div>`;
     };
