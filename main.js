@@ -81,7 +81,7 @@ function showMainMenu() {
 
 async function loadTool(toolName) {
     uiContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+        <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
         </div>
     `;
