@@ -161,8 +161,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 <button class="btn secondary play-pause-btn" style="flex: 2;">Pause</button>
                 <button class="btn secondary step-fwd-btn" style="flex: 1;">&gt;&gt;</button>
             </div>
-
-            <button class="btn dashboard" id="dashboard-btn" style="margin-top: 1rem;">Dashboard</button>
         </div>
 
         <div id="main-modal" class="modal-bg" style="display: none;">
@@ -175,7 +173,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const assetInput = document.getElementById('asset-input');
     const animInput = document.getElementById('anim-input');
     const copyCodeBtn = document.getElementById('copy-code-btn');
-    const dashboardBtn = document.getElementById('dashboard-btn');
     const tabContainer = document.getElementById('tab-container');
     const controlPanelsContainer = document.getElementById('control-panels-container');
     const animControlsContainer = document.querySelector('.anim-controls-container');
@@ -448,10 +445,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
     animInput.addEventListener('change', (e) => loadAnimation(e.target.files[0]));
     copyCodeBtn.addEventListener('click', copyEquipment);
-    dashboardBtn.addEventListener('click', () => {
-        resetScene();
-        onBackToDashboard();
-    });
 
     playPauseBtn.addEventListener('click', () => {
         if (!mainCharacter || !mainCharacter.mixer) return;
