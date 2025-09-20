@@ -31,46 +31,29 @@
             width: 100%; height: 100%; overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex; flex-direction: column; background-color: var(--viewer-bg);
-            touch-action: none; /* Prevents unwanted browser gestures on mobile */
+            touch-action: none;
         }
         #app-container {
             flex-grow: 1; display: flex; flex-direction: column; position: relative;
         }
         #viewer-container {
-            flex-grow: 1; /* This will make it fill the top half */
+            flex-grow: 1;
             position: relative;
             min-height: 200px;
         }
-        #tools-container {
+        #ui-container {
             flex-shrink: 0;
-            height: 40vh; /* Bottom half for tools */
+            height: 40vh;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             background: var(--ui-bg);
             border-top: 1px solid var(--border-color);
             padding: 1rem;
             overflow-y: auto;
-            display: none; /* Controlled by main.js */
-        }
-        #navbar-container {
-            flex-shrink: 0;
-            height: 8vh; /* A fixed height for the navbar at the bottom */
-            background: var(--ios-glass-bg);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
             display: flex;
-            justify-content: space-around;
-            align-items: center;
-            border-top: 1px solid var(--ios-glass-border);
+            flex-direction: column;
+            gap: 1rem;
         }
-        .nav-item {
-            display: flex; flex-direction: column; align-items: center; cursor: pointer;
-            font-size: 0.7rem; font-weight: 500; color: #8e8e93; transition: color 0.2s ease;
-        }
-        .nav-item.active { color: var(--primary-color); }
-        .nav-icon { width: 30px; height: 30px; margin-bottom: 4px; }
-        .nav-label { user-select: none; }
-        
         #loading-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--viewer-bg); z-index: 1000;
@@ -93,24 +76,26 @@
             background: rgba(0, 0, 0, 0.05); border-radius: 8px; padding: 10px;
             font-size: 0.8rem; color: #333; overflow-y: scroll;
         }
-
-        /* Tool-specific UI styles */
+        .btn {
+            display: block; width: 100%; padding: 0.8rem; border: none;
+            border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+            text-align: center; cursor: pointer; transition: all 0.2s ease;
+            background-color: var(--primary-color); color: white;
+        }
+        .btn.dashboard {
+            background-color: #6c757d;
+        }
         .card {
             background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem;
             box-shadow: 0 4px 12px var(--shadow-color); display: flex; flex-direction: column; gap: 0.75rem;
         }
-        .card h2 {
-            font-size: 1rem; color: var(--text-color); padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .btn, .file-label {
+        .file-label {
             display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color);
             border-radius: 8px; font-size: 0.9rem; font-weight: 500;
             text-align: center; cursor: pointer; transition: all 0.2s ease;
             background-color: #e9e9eb; color: var(--text-color);
         }
-        .btn { border: none; background-color: var(--primary-color); color: white; font-weight: 600; }
-        .btn:disabled, .file-label.disabled {
+        .file-label.disabled {
             background-color: #e9e9eb !important; color: #8e8e93 !important; cursor: not-allowed; opacity: 0.7;
         }
         .status-log {
@@ -131,21 +116,7 @@
             <div id="process-log"></div>
         </div>
         <div id="viewer-container"></div>
-        <div id="tools-container"></div>
-    </div>
-    <div id="navbar-container">
-        <div class="nav-item active" data-tool="rigremoval">
-            <div class="nav-icon">🔪</div>
-            <span class="nav-label">Rig Remover</span>
-        </div>
-        <div class="nav-item" data-tool="attachmentrig">
-            <div class="nav-icon">🔗</div>
-            <span class="nav-label">Attachment</span>
-        </div>
-        <div class="nav-item" data-tool="compressor">
-            <div class="nav-icon">📦</div>
-            <span class="nav-label">Compressor</span>
-        </div>
+        <div id="ui-container"></div>
     </div>
     
     <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
