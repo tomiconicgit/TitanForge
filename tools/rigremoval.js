@@ -31,7 +31,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
         </div>
     `;
 
-    // Local state and functions
     const statusLog = document.getElementById('rig-status-log');
     const modelInput = document.getElementById('rig-model-input');
     const textureInput = document.getElementById('rig-texture-input');
