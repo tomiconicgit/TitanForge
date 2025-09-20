@@ -18,10 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(() => {
             logProcess("Main application initialized.");
             loadingText.textContent = "TitanForge is ready!";
+
+            // Slow down the transition to the dashboard
             setTimeout(() => {
-                loadingScreen.style.opacity = '0';
-                loadingScreen.style.pointerEvents = 'none';
-            }, 500);
+                loadingScreen.classList.add('fade-out');
+                loadingScreen.addEventListener('animationend', () => {
+                    loadingScreen.style.display = 'none';
+                    loadingScreen.style.pointerEvents = 'none';
+                }, { once: true });
+            }, 1000); // 1-second delay before starting the fade-out
         })
         .catch(err => {
             logProcess(`Fatal error: ${err.message}`, 'error');
