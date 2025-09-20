@@ -2,12 +2,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// --- ADD THESE IMPORTS ---
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-
-// --- Rest of your main.js code ---
 let scene, camera, renderer, controls;
 let currentToolInstance = null;
 const viewerContainer = document.getElementById('viewer-container');
@@ -69,7 +63,7 @@ function animate() {
 
 function showMainMenu() {
     uiContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
+        <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
             <h2>Choose a Tool</h2>
             <button class="btn" id="rigremoval-btn">Rig Removal Tool</button>
             <button class="btn" id="attachmentrig-btn">Attachment Rig Tool</button>
@@ -92,7 +86,6 @@ async function loadTool(toolName) {
         </div>
     `;
     
-    // Clear the current scene
     scene.children.slice().forEach(child => {
         if (child.type === 'Mesh') {
             scene.remove(child);
@@ -102,7 +95,6 @@ async function loadTool(toolName) {
     try {
         const module = await toolModules[toolName]();
         currentToolInstance = module;
-        // The init function will populate the UI and handle tool-specific logic
         module.init(scene, uiContainer, showMainMenu);
 
     } catch (error) {
