@@ -2,9 +2,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-export function initAttachmentRigTool(scene, viewerContainer) {
-    const toolsContainer = document.getElementById('tools-container');
-    toolsContainer.innerHTML = `
+export function init(scene, uiContainer, onBackToDashboard) {
+    // Local state and functions
+    const clock = new THREE.Clock();
+    let currentMode = 'equipment';
+    let mainCharacter = null;
+    const sceneObjects = new Map();
+    let activeObjectId = null;
+
+    uiContainer.innerHTML = `
         <style>
             .nav-btn { flex-grow: 1; padding: 12px; border: none; background: transparent; font-size: 16px; font-weight: bold; cursor: pointer; border-bottom: 3px solid transparent; }
             .nav-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
@@ -30,47 +36,46 @@ export function initAttachmentRigTool(scene, viewerContainer) {
             .wardrobe-item label { user-select: none; }
             .wardrobe-item input[type="checkbox"] { width: 20px; height: 20px; }
         </style>
-        <header>
-            <button class="nav-btn active" data-mode="equipment">Equipment</button>
-            <button class="nav-btn" data-mode="wardrobe">Wardrobe</button>
-        </header>
-        <div id="equipment-ui" class="mode-ui active">
-            <button class="btn" id="attach-load-character">Load Character</button>
-            <button class="btn" id="attach-load-asset">Load Asset</button>
-            <button class="btn tertiary" id="attach-load-anim">Load Animation</button>
-            <div class="anim-controls-container">
-                <button class="btn secondary step-back-btn">&lt;&lt;</button>
-                <button class="btn secondary play-pause-btn">Pause</button>
-                <button class="btn secondary step-fwd-btn">&gt;&gt;</button>
+        <div style="display: flex; flex-direction: column; height: 100%;">
+            <header>
+                <button class="nav-btn active" data-mode="equipment">Equipment</button>
+                <button class="nav-btn" data-mode="wardrobe">Wardrobe</button>
+            </header>
+            <div id="equipment-ui" class="mode-ui active">
+                <button class="btn" id="attach-load-character">Load Character</button>
+                <button class="btn" id="attach-load-asset">Load Asset</button>
+                <button class="btn tertiary" id="attach-load-anim">Load Animation</button>
+                <div class="anim-controls-container">
+                    <button class="btn secondary step-back-btn">&lt;&lt;</button>
+                    <button class="btn secondary play-pause-btn">Pause</button>
+                    <button class="btn secondary step-fwd-btn">&gt;&gt;</button>
+                </div>
+                <button class="btn secondary" id="attach-copy-equipment">Copy Equipment</button>
             </div>
-            <button class="btn secondary" id="attach-copy-equipment">Copy Equipment</button>
-        </div>
-        <div id="wardrobe-ui" class="mode-ui">
-            <button class="btn" id="attach-load-character2">Load Character</button>
-            <button class="btn" id="attach-load-clothing">Load Clothing</button>
-            <div class="anim-controls-container">
-                <button class="btn secondary step-back-btn">&lt;&lt;</button>
-                <button class="btn secondary play-pause-btn">Pause</button>
-                <button class="btn secondary step-fwd-btn">&gt;&gt;</button>
+            <div id="wardrobe-ui" class="mode-ui">
+                <button class="btn" id="attach-load-character2">Load Character</button>
+                <button class="btn" id="attach-load-clothing">Load Clothing</button>
+                <div class="anim-controls-container">
+                    <button class="btn secondary step-back-btn">&lt;&lt;</button>
+                    <button class="btn secondary play-pause-btn">Pause</button>
+                    <button class="btn secondary step-fwd-btn">&gt;&gt;</button>
+                </div>
+                <button class="btn secondary" id="attach-copy-wardrobe">Copy Wardrobe</button>
             </div>
-            <button class="btn secondary" id="attach-copy-wardrobe">Copy Wardrobe</button>
+            <div id="tab-bar"></div>
+            <div id="control-panels"></div>
+            <input type="file" id="attach-character-input" accept=".glb">
+            <input type="file" id="attach-asset-input" accept=".glb, .gltf" multiple>
+            <input type="file" id="attach-anim-input" accept=".glb, .gltf">
+            <button class="btn dashboard" id="dashboard-btn" style="margin-top: auto;">Dashboard</button>
         </div>
-        <div id="tab-bar"></div>
-        <div id="control-panels"></div>
-        <input type="file" id="attach-character-input" accept=".glb">
-        <input type="file" id="attach-asset-input" accept=".glb, .gltf" multiple>
-        <input type="file" id="attach-anim-input" accept=".glb, .gltf">
     `;
 
-    const clock = new THREE.Clock();
-    let currentMode = 'equipment';
-    let mainCharacter = null;
-    const sceneObjects = new Map();
-    let activeObjectId = null;
-
+    // Local state and functions
+    const gltfLoader = new GLTFLoader();
     const controlPanelsContainer = document.getElementById('control-panels');
     const tabBarContainer = document.getElementById('tab-bar');
-    const gltfLoader = new GLTFLoader();
+    const dashboardBtn = document.getElementById('dashboard-btn');
 
     function loadGLB(files, isCharacter) {
         if (!files || files.length === 0) return;
@@ -333,4 +338,9 @@ export function initAttachmentRigTool(scene, viewerContainer) {
     };
     
     document.querySelectorAll('.anim-controls-container').forEach(setupAnimListeners);
+
+    dashboardBtn.addEventListener('click', () => {
+        resetScene();
+        onBackToDashboard();
+    });
 }
