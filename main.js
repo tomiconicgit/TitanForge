@@ -7,6 +7,7 @@ let currentToolInstance = null;
 const viewerContainer = document.getElementById('viewer-container');
 const uiContainer = document.getElementById('ui-container');
 const dashboardBtn = document.getElementById('dashboard-btn');
+const floatingButtonsContainer = document.getElementById('floating-buttons-container');
 
 const toolModules = {
     rigremoval: () => import('./tools/rigremoval.js'),
@@ -63,6 +64,7 @@ function animate() {
 
 function showMainMenu() {
     dashboardBtn.style.display = 'none';
+    floatingButtonsContainer.style.display = 'none';
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
             <h2>Choose a Tool</h2>
@@ -82,13 +84,13 @@ function showMainMenu() {
 
 async function loadTool(toolName) {
     dashboardBtn.style.display = 'block';
+    // floatingButtonsContainer.style.display is controlled by the tool
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
         </div>
     `;
     
-    // Clear the scene of any old models
     scene.children.slice().forEach(child => {
         if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh' || child.type === 'Bone') {
             scene.remove(child);
