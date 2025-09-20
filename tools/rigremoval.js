@@ -1,28 +1,27 @@
+// tools/rigremoval.js
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
-// All the logic from your original PWA is here.
 export function initRigRemovalTool(scene, viewerContainer, currentModel, originalModel) {
-    const uiContainer = document.getElementById('tools-container');
-    uiContainer.innerHTML = `
+    const toolsContainer = document.getElementById('tools-container');
+    toolsContainer.innerHTML = `
         <div id="ui-content" style="width: 100%; max-width: 1000px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin: 0 auto;">
-            <div class="card" style="background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem; box-shadow: 0 4px 12px var(--shadow-color); display: flex; flex-direction: column; gap: 0.75rem;">
+            <div class="card">
                 <h2>1. Load Character</h2>
-                <label for="rig-model-input" class="file-label" style="display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem; font-weight: 500; text-align: center; cursor: pointer; transition: all 0.2s ease; background-color: #e9e9eb; color: var(--text-color);">Load .glb File</label>
+                <label for="rig-model-input" class="file-label">Load .glb File</label>
                 <input type="file" id="rig-model-input" accept=".glb" hidden>
-                <div id="rig-status-log" style="font-size: 0.85rem; text-align: center; color: #636366; padding: 0.5rem; background-color: #e9e9eb; border-radius: 6px; margin-top: auto; transition: all 0.3s ease;">Load a GLB model to start.</div>
+                <div id="rig-status-log" class="status-log">Load a GLB model to start.</div>
             </div>
-            <div class="card" style="background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem; box-shadow: 0 4px 12px var(--shadow-color); display: flex; flex-direction: column; gap: 0.75rem;">
+            <div class="card">
                 <h2>2. Load Textures</h2>
-                <label for="rig-texture-input" class="file-label disabled" style="display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem; font-weight: 500; text-align: center; cursor: pointer; transition: all 0.2s ease; background-color: #e9e9eb; color: #8e8e93; opacity: 0.7;">Load Images</label>
+                <label for="rig-texture-input" class="file-label disabled">Load Images</label>
                 <input type="file" id="rig-texture-input" accept=".png, .jpg, .jpeg" multiple hidden disabled>
             </div>
-            <div class="card" style="background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem; box-shadow: 0 4px 12px var(--shadow-color); display: flex; flex-direction: column; gap: 0.75rem;">
+            <div class="card">
                 <h2>3. Process & Export</h2>
-                <button id="rig-process-btn" class="btn" disabled style="display: block; width: 100%; padding: 0.8rem; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; text-align: center; cursor: not-allowed; transition: all 0.2s ease; background-color: #e9e9eb; color: #8e8e93; opacity: 0.7;">Remove Rig & T-Pose</button>
-                <button id="rig-export-btn" class="btn" disabled style="display: block; width: 100%; padding: 0.8rem; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; text-align: center; cursor: not-allowed; transition: all 0.2s ease; background-color: #e9e9eb; color: #8e8e93; opacity: 0.7;">Export as .glb</button>
+                <button id="rig-process-btn" class="btn" disabled>Remove Rig & T-Pose</button>
+                <button id="rig-export-btn" class="btn" disabled>Export as .glb</button>
             </div>
         </div>
     `;
