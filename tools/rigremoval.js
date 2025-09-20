@@ -8,7 +8,7 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 export function init(scene, uiContainer, onBackToDashboard) {
     let currentModel = null;
     let objString = null;
-    let originalMaterials = new Map(); // Store materials for re-application
+    let originalMaterials = new Map();
 
     uiContainer.innerHTML = `
         <div style="display: flex; flex-direction: column; height: 100%;">
@@ -20,29 +20,45 @@ export function init(scene, uiContainer, onBackToDashboard) {
                     <div id="rig-status-log" class="status-log">Select a rigged GLB file.</div>
                 </div>
                 <div class="card">
-                    <h2>2. Convert</h2>
-                    <button id="convert-to-obj-btn" class="btn" disabled>Convert to OBJ</button>
-                    <button id="convert-to-glb-btn" class="btn" disabled>Convert to GLB</button>
+                    <h2>2. Process</h2>
+                    <button id="remove-rig-btn" class="btn" disabled>Remove Rig</button>
                     <div id="process-log" style="font-size: 0.8em; text-align: left; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; height: 100px; overflow-y: scroll; display: none;"></div>
                 </div>
                 <div class="card">
                     <h2>3. Export</h2>
-                    <button id="rig-export-btn" class="btn" disabled>Export as .glb</button>
+                    <button id="export-glb-btn" class="btn" disabled>Export as .glb</button>
                     <p style="font-size: 0.8em; text-align: center; color: #636366;">*This will be an unrigged model.</p>
                 </div>
             </div>
             <button class="btn dashboard" id="dashboard-btn" style="margin-top: auto;">Dashboard</button>
         </div>
+        
+        <div id="rig-removed-modal" style="display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+            <div style="background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; text-align: center; border-radius: 10px;">
+                <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;">Rig Removed!</p>
+                <button id="complete-btn" class="btn">Complete</button>
+            </div>
+        </div>
+        
+        <div id="preparing-download-modal" style="display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+            <div style="background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; text-align: center; border-radius: 10px;">
+                <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;">Preparing Download...</p>
+                <div id="download-spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 0 auto;"></div>
+                <style> @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } </style>
+            </div>
+        </div>
     `;
 
     const statusLog = document.getElementById('rig-status-log');
     const modelInput = document.getElementById('rig-model-input');
-    const convertToObjBtn = document.getElementById('convert-to-obj-btn');
-    const convertToGlbBtn = document.getElementById('convert-to-glb-btn');
-    const exportBtn = document.getElementById('rig-export-btn');
+    const removeRigBtn = document.getElementById('remove-rig-btn');
+    const exportGlbBtn = document.getElementById('export-glb-btn');
     const dashboardBtn = document.getElementById('dashboard-btn');
     const processLogDiv = document.getElementById('process-log');
-    
+    const rigRemovedModal = document.getElementById('rig-removed-modal');
+    const completeBtn = document.getElementById('complete-btn');
+    const preparingDownloadModal = document.getElementById('preparing-download-modal');
+
     const gltfLoader = new GLTFLoader();
     const objExporter = new OBJExporter();
     const objLoader = new OBJLoader();
@@ -55,6 +71,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     };
 
     const logProcess = (message) => {
+        processLogDiv.style.display = 'block';
         const line = document.createElement('div');
         line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
         processLogDiv.appendChild(line);
@@ -66,9 +83,8 @@ export function init(scene, uiContainer, onBackToDashboard) {
         currentModel = null;
         objString = null;
         originalMaterials.clear();
-        convertToObjBtn.disabled = true;
-        convertToGlbBtn.disabled = true;
-        exportBtn.disabled = true;
+        removeRigBtn.disabled = true;
+        exportGlbBtn.disabled = true;
         processLogDiv.textContent = '';
         processLogDiv.style.display = 'none';
         logStatus("Select a rigged GLB file.");
@@ -78,12 +94,53 @@ export function init(scene, uiContainer, onBackToDashboard) {
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         
-        // Scale model to a standard size (e.g., 1.65 units in height)
         if (size.y > 0) model.scale.setScalar(1.65 / size.y);
 
-        // Recenter the model to the origin
         const scaledBox = new THREE.Box3().setFromObject(model);
         model.position.y -= scaledBox.min.y;
+    };
+
+    const convertToGlb = () => {
+        if (!objString) {
+            logStatus("No OBJ data to convert.", 'error');
+            return;
+        }
+
+        logStatus('Rebuilding model...');
+        logProcess("Starting GLB conversion...");
+
+        if (currentModel) scene.remove(currentModel);
+
+        setTimeout(() => {
+            try {
+                const deRiggedModel = objLoader.parse(objString);
+                
+                centerAndOrientModel(deRiggedModel);
+                deRiggedModel.rotation.set(0, 0, 0);
+
+                deRiggedModel.traverse(node => {
+                    if (node.isMesh) {
+                        const originalMaterial = originalMaterials.get(node.name);
+                        if (originalMaterial) {
+                            node.material = originalMaterial;
+                        } else {
+                            node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
+                        }
+                    }
+                });
+
+                currentModel = deRiggedModel;
+                scene.add(currentModel);
+
+                logProcess("GLB conversion complete.");
+                exportGlbBtn.disabled = false;
+                logStatus("Model ready for export.");
+            } catch (e) {
+                logProcess("Error during GLB conversion: " + e.message);
+                logStatus("Conversion failed.", 'error');
+                console.error(e);
+            }
+        }, 100);
     };
 
     modelInput.addEventListener('change', (event) => {
@@ -96,25 +153,19 @@ export function init(scene, uiContainer, onBackToDashboard) {
             gltfLoader.parse(e.target.result, '', (gltf) => {
                 const model = gltf.scene;
 
-                // Save original materials before conversion
                 originalMaterials.clear();
                 model.traverse(node => {
                     if (node.isMesh && node.material) {
-                        // We store the material indexed by its name
                         originalMaterials.set(node.name, node.material.clone());
                     }
                 });
 
-                // Set initial orientation
-                model.rotation.set(-Math.PI / 2, 0, Math.PI); 
-
-                // Add model to scene and adjust
                 scene.add(model);
                 centerAndOrientModel(model);
                 currentModel = model;
 
-                convertToObjBtn.disabled = false;
-                logStatus("Model loaded. Ready to convert to OBJ.");
+                removeRigBtn.disabled = false;
+                logStatus("Model loaded. Ready to remove rig.");
             }, (error) => {
                 logStatus("Error: Failed to parse GLB file.", 'error');
                 console.error(error);
@@ -123,20 +174,19 @@ export function init(scene, uiContainer, onBackToDashboard) {
         reader.readAsArrayBuffer(file);
     });
 
-    convertToObjBtn.addEventListener('click', () => {
+    removeRigBtn.addEventListener('click', () => {
         if (!currentModel) {
             logStatus("No model loaded.", 'error');
             return;
         }
 
-        logStatus('Converting to OBJ...');
+        logStatus('Removing rig...');
         processLogDiv.style.display = 'block';
         processLogDiv.textContent = '';
-        logProcess("Starting OBJ conversion...");
+        logProcess("Starting rig removal process...");
         
         setTimeout(() => {
             try {
-                // Ensure the model is in its neutral pose before exporting
                 if (currentModel.animations && currentModel.animations.length > 0) {
                     const mixer = new THREE.AnimationMixer(currentModel);
                     mixer.setTime(0);
@@ -144,87 +194,47 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 }
                 
                 objString = objExporter.parse(currentModel);
-                logProcess("OBJ conversion complete.");
-                convertToObjBtn.disabled = true;
-                convertToGlbBtn.disabled = false;
-                logStatus("Conversion to OBJ successful. Ready to convert back to GLB.");
+                logProcess("Rig removal complete.");
+                removeRigBtn.disabled = true;
+                logStatus("Rig removed. Press 'Complete' to finalize the model.");
+                rigRemovedModal.style.display = 'block';
             } catch (e) {
-                logProcess("Error during OBJ conversion: " + e.message);
-                logStatus("Conversion failed.", 'error');
+                logProcess("Error during rig removal: " + e.message);
+                logStatus("Rig removal failed.", 'error');
                 console.error(e);
             }
         }, 100);
     });
 
-    convertToGlbBtn.addEventListener('click', () => {
-        if (!objString) {
-            logStatus("No OBJ data to convert.", 'error');
-            return;
-        }
-
-        logStatus('Converting to GLB...');
-        logProcess("Starting GLB conversion...");
-
-        // Clear the old model from the scene
-        if (currentModel) scene.remove(currentModel);
-
-        setTimeout(() => {
-            try {
-                // Load the OBJ string back into a Three.js scene
-                const deRiggedModel = objLoader.parse(objString);
-                
-                // Re-center and re-orient the de-rigged model
-                centerAndOrientModel(deRiggedModel);
-                deRiggedModel.rotation.set(0, 0, 0); // Reset rotation after centering
-
-                // Re-apply original materials to the new meshes
-                deRiggedModel.traverse(node => {
-                    if (node.isMesh) {
-                        const originalMaterial = originalMaterials.get(node.name);
-                        if (originalMaterial) {
-                            node.material = originalMaterial;
-                        } else {
-                            // Fallback to a default material if none found
-                            node.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
-                        }
-                    }
-                });
-
-                currentModel = deRiggedModel;
-                scene.add(currentModel);
-
-                logProcess("GLB conversion complete.");
-                convertToGlbBtn.disabled = true;
-                exportBtn.disabled = false;
-                logStatus("Model ready for export.");
-            } catch (e) {
-                logProcess("Error during GLB conversion: " + e.message);
-                logStatus("Conversion failed.", 'error');
-                console.error(e);
-            }
-        }, 100);
+    completeBtn.addEventListener('click', () => {
+        rigRemovedModal.style.display = 'none';
+        convertToGlb();
     });
 
-    exportBtn.addEventListener('click', () => {
+    exportGlbBtn.addEventListener('click', () => {
         if (!currentModel) {
             logStatus("No model to export.", 'error');
             return;
         }
         
-        logStatus('Exporting file...');
-        
-        gltfExporter.parse(currentModel, (result) => {
-            const blob = new Blob([result], { type: 'model/gltf-binary' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'model_static.glb';
-            link.click();
-            URL.revokeObjectURL(link.href);
-            logStatus('Export complete!');
-        }, (error) => {
-            logStatus('Export failed. See console.', 'error');
-            console.error('An error happened during parsing', error);
-        }, { binary: true });
+        preparingDownloadModal.style.display = 'block';
+
+        setTimeout(() => {
+            gltfExporter.parse(currentModel, (result) => {
+                const blob = new Blob([result], { type: 'model/gltf-binary' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'model_static.glb';
+                link.click();
+                URL.revokeObjectURL(link.href);
+                logStatus('Export complete!');
+                preparingDownloadModal.style.display = 'none';
+            }, (error) => {
+                logStatus('Export failed. See console.', 'error');
+                console.error('An error happened during parsing', error);
+                preparingDownloadModal.style.display = 'none';
+            }, { binary: true });
+        }, 500); // Small delay to show the modal
     });
 
     dashboardBtn.addEventListener('click', () => {
