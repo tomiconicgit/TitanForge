@@ -13,10 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const assetsToLoad = [
-        'main.js',
-        'tools/rigremoval.js',
-        'tools/attachmentrig.js',
-        // Add other assets here if needed, like Draco libraries
+        'main.js'
     ];
     
     let loadedCount = 0;
@@ -50,7 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
             loadingText.textContent = "All files loaded. Initializing...";
             logProcess("All dependencies loaded. Importing main application.");
 
-            // Import the main app logic after all files are ready
             return import('./main.js');
         })
         .then(() => {
