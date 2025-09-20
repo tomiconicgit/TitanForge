@@ -38,6 +38,8 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const exportBtn = document.getElementById('rig-export-btn');
     const textureLabel = document.querySelector('label[for="rig-texture-input"]');
     const dashboardBtn = document.getElementById('dashboard-btn');
+    const gltfLoader = new GLTFLoader();
+    const textureLoader = new THREE.TextureLoader();
 
     const logStatus = (message, level = 'info') => {
         statusLog.textContent = message;
@@ -45,8 +47,17 @@ export function init(scene, uiContainer, onBackToDashboard) {
         if (level === 'error') statusLog.classList.add('error');
     };
 
-    const textureLoader = new THREE.TextureLoader();
-    const gltfLoader = new GLTFLoader();
+    const resetToolState = () => {
+        if (currentModel) scene.remove(currentModel);
+        currentModel = null;
+        originalModel = null;
+        textureInput.disabled = true;
+        textureLabel.classList.add('disabled');
+        processBtn.disabled = true;
+        exportBtn.disabled = true;
+        logStatus("Load a GLB model to start.");
+    };
+
     const textureMap = {
         _albedo: 'map', _color: 'map', _diffuse: 'map', _basecolor: 'map',
         _normal: 'normalMap', _n: 'normalMap', _roughness: 'roughnessMap',
@@ -83,21 +94,11 @@ export function init(scene, uiContainer, onBackToDashboard) {
                         break;
                     }
                 }
-                if(assigned) console.log(`Applied ${file.name}`);
+                if (assigned) console.log(`Applied ${file.name}`);
                 URL.revokeObjectURL(url);
             });
         });
         logStatus("Textures applied successfully.");
-    };
-    
-    const resetToolState = () => {
-        if (currentModel) scene.remove(currentModel);
-        currentModel = null; originalModel = null;
-        textureInput.disabled = true;
-        textureLabel.classList.add('disabled');
-        processBtn.disabled = true;
-        exportBtn.disabled = true;
-        logStatus("Load a GLB model to start.");
     };
 
     modelInput.addEventListener('change', (event) => {
@@ -105,7 +106,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
         if (!file) return;
         resetToolState();
         logStatus(`Loading model: ${file.name}`);
-        
         const reader = new FileReader();
         reader.onload = (e) => {
             gltfLoader.parse(e.target.result, '', (gltf) => {
@@ -115,8 +115,16 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 if (size.y > 0) model.scale.setScalar(1.65 / size.y);
                 const scaledBox = new THREE.Box3().setFromObject(model);
                 model.position.y -= scaledBox.min.y;
-                model.traverse(node => { if (node.isMesh) node.castShadow = true; });
-                
+                model.traverse(node => {
+                    if (node.isMesh) {
+                        node.castShadow = true;
+                        // Store the original skeleton and bindMatrix for later
+                        if (node.isSkinnedMesh) {
+                            node.userData.originalSkeleton = node.skeleton;
+                            node.userData.originalBindMatrix = node.bindMatrix;
+                        }
+                    }
+                });
                 originalModel = model;
                 currentModel = model;
                 scene.add(model);
@@ -137,30 +145,46 @@ export function init(scene, uiContainer, onBackToDashboard) {
         const files = Array.from(event.target.files);
         if (files.length > 0) applyTextures(currentModel, files);
     });
-    
+
     processBtn.addEventListener('click', () => {
         if (!originalModel) return;
-        logStatus('Processing: Removing rig...');
-        const staticModel = new THREE.Group();
-        originalModel.traverse(child => {
-            if (child.isSkinnedMesh) {
-                // Clone the geometry and material to ensure no shared references
-                const newMesh = new THREE.Mesh(child.geometry.clone(), child.material.clone());
-                newMesh.position.copy(child.position);
-                newMesh.rotation.copy(child.rotation);
-                newMesh.scale.copy(child.scale);
-                staticModel.add(newMesh);
+        logStatus('Processing: Removing rig and T-Posing...');
+
+        const staticGroup = new THREE.Group();
+
+        originalModel.traverse(node => {
+            if (node.isSkinnedMesh) {
+                // Remove the skeleton to get the T-Pose geometry
+                const geometry = node.geometry;
+                const material = node.material.clone();
+
+                const newMesh = new THREE.Mesh(geometry, material);
+                
+                // Copy the world position and scale of the original mesh
+                const position = new THREE.Vector3();
+                const quaternion = new THREE.Quaternion();
+                const scale = new THREE.Vector3();
+                node.matrixWorld.decompose(position, quaternion, scale);
+                newMesh.position.copy(position);
+                newMesh.scale.copy(scale);
+                
+                // Set rotation to a T-pose friendly orientation
+                newMesh.rotation.set(0, 0, 0);
+
+                staticGroup.add(newMesh);
             }
-            else if (child.isMesh) {
-                // Standard meshes can be cloned directly
-                const newMesh = child.clone();
-                staticModel.add(newMesh);
+            else if (node.isMesh && !node.isSkinnedMesh) {
+                // If it's a regular mesh, just clone it
+                const clonedMesh = node.clone();
+                staticGroup.add(clonedMesh);
             }
         });
-        staticModel.applyMatrix4(originalModel.matrixWorld);
+
+        // Clean up the old rigged model from the scene
         scene.remove(currentModel);
-        currentModel = staticModel;
+        currentModel = staticGroup;
         scene.add(currentModel);
+
         logStatus('Rig removed. Ready to export.');
         exportBtn.disabled = false;
         processBtn.disabled = true;
@@ -169,18 +193,29 @@ export function init(scene, uiContainer, onBackToDashboard) {
     exportBtn.addEventListener('click', () => {
         if (!currentModel) return;
         logStatus('Exporting to GLB...');
-        new GLTFExporter().parse(currentModel, result => {
-            const blob = new Blob([result], { type: 'model/gltf-binary' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'model_static.glb';
-            link.click();
-            URL.revokeObjectURL(link.href);
-            logStatus('Export complete!');
-        }, error => {
+        
+        const exporter = new GLTFExporter();
+        const options = {
+            binary: true
+        };
+        
+        exporter.parse(currentModel, (result) => {
+            if (result instanceof ArrayBuffer) {
+                const blob = new Blob([result], { type: 'model/gltf-binary' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'model_static.glb';
+                link.click();
+                URL.revokeObjectURL(link.href);
+                logStatus('Export complete!');
+            } else {
+                logStatus('Export failed: Invalid result format.', 'error');
+                console.error('GLTFExporter result is not an ArrayBuffer.');
+            }
+        }, (error) => {
             logStatus('Export failed. See console.', 'error');
             console.error('An error happened during parsing', error);
-        });
+        }, options);
     });
 
     dashboardBtn.addEventListener('click', () => {
