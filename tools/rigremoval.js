@@ -118,11 +118,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 model.traverse(node => {
                     if (node.isMesh) {
                         node.castShadow = true;
-                        // Store the original skeleton and bindMatrix for later
-                        if (node.isSkinnedMesh) {
-                            node.userData.originalSkeleton = node.skeleton;
-                            node.userData.originalBindMatrix = node.bindMatrix;
-                        }
                     }
                 });
                 originalModel = model;
@@ -150,40 +145,48 @@ export function init(scene, uiContainer, onBackToDashboard) {
         if (!originalModel) return;
         logStatus('Processing: Removing rig and T-Posing...');
 
-        const staticGroup = new THREE.Group();
+        // Directly modify the original model instead of creating a new one
+        const meshesToKeep = [];
+        const bonesToRemove = [];
 
         originalModel.traverse(node => {
             if (node.isSkinnedMesh) {
-                // Remove the skeleton to get the T-Pose geometry
-                const geometry = node.geometry;
-                const material = node.material.clone();
-
-                const newMesh = new THREE.Mesh(geometry, material);
+                // Remove the skeleton and bind matrix properties
+                node.bindMode = null;
+                node.bindMatrix = null;
+                node.bindMatrixInverse = null;
+                node.skeleton = null;
                 
-                // Copy the world position and scale of the original mesh
-                const position = new THREE.Vector3();
-                const quaternion = new THREE.Quaternion();
-                const scale = new THREE.Vector3();
-                node.matrixWorld.decompose(position, quaternion, scale);
-                newMesh.position.copy(position);
-                newMesh.scale.copy(scale);
-                
-                // Set rotation to a T-pose friendly orientation
-                newMesh.rotation.set(0, 0, 0);
+                // Convert SkinnedMesh to a standard Mesh
+                const oldGeometry = node.geometry;
+                const newMesh = new THREE.Mesh(oldGeometry, node.material);
+                newMesh.position.copy(node.position);
+                newMesh.rotation.copy(node.rotation);
+                newMesh.scale.copy(node.scale);
 
-                staticGroup.add(newMesh);
+                // We need to detach it from the parent and re-add it to avoid issues.
+                // This is the cleanest way to fully "de-rig" it.
+                if (node.parent) {
+                    node.parent.remove(node);
+                    originalModel.add(newMesh); // Re-add the new mesh to the main model group
+                }
+                
+                meshesToKeep.push(newMesh);
             }
-            else if (node.isMesh && !node.isSkinnedMesh) {
-                // If it's a regular mesh, just clone it
-                const clonedMesh = node.clone();
-                staticGroup.add(clonedMesh);
+            else if (node.isMesh) {
+                meshesToKeep.push(node);
+            }
+            else if (node.isBone) {
+                bonesToRemove.push(node);
             }
         });
 
-        // Clean up the old rigged model from the scene
-        scene.remove(currentModel);
-        currentModel = staticGroup;
-        scene.add(currentModel);
+        // Remove all bone objects from the scene graph
+        bonesToRemove.forEach(bone => {
+            if (bone.parent) {
+                bone.parent.remove(bone);
+            }
+        });
 
         logStatus('Rig removed. Ready to export.');
         exportBtn.disabled = false;
