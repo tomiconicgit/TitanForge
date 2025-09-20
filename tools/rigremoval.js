@@ -160,15 +160,13 @@ export function init(scene, uiContainer, onBackToDashboard) {
                     }
                 });
 
-                // Clear the scene and add the new model
                 scene.children.slice().forEach(child => {
-                    if (child.type === 'Mesh' || child.type === 'Group') {
+                    if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh') {
                         scene.remove(child);
                     }
                 });
                 scene.add(model);
                 
-                // Set initial orientation
                 model.rotation.set(-Math.PI / 2, 0, Math.PI); 
                 centerAndOrientModel(model);
                 currentModel = model;
