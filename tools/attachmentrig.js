@@ -63,7 +63,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 <button class="btn secondary" id="attach-copy-wardrobe">Copy Wardrobe</button>
             </div>
             <div id="tab-bar"></div>
-            <div id="control-panels"></div>
+            <div id="control-panels" style="flex-grow: 1; overflow-y: auto;"></div>
             <input type="file" id="attach-character-input" accept=".glb">
             <input type="file" id="attach-asset-input" accept=".glb, .gltf" multiple>
             <input type="file" id="attach-anim-input" accept=".glb, .gltf">
