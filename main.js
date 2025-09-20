@@ -84,7 +84,7 @@ function showMainMenu() {
 
 async function loadTool(toolName) {
     dashboardBtn.style.display = 'block';
-    // floatingButtonsContainer.style.display is controlled by the tool
+    floatingButtonsContainer.style.display = 'none'; // Hide by default, tool will manage
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
