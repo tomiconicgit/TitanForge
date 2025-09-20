@@ -112,8 +112,21 @@
             right: 1rem;
             width: auto;
             padding: 0.5rem 1rem;
-            display: none; /* Controlled by main.js */
+            display: none;
             z-index: 10;
+        }
+        #floating-buttons-container {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        #floating-buttons-container .btn {
+            width: auto;
+            padding: 0.5rem 1rem;
         }
         .btn:disabled {
             opacity: 0.5;
@@ -183,6 +196,18 @@
             <div id="process-log"></div>
         </div>
         <button id="dashboard-btn" class="btn dashboard">Dashboard</button>
+        <div id="floating-buttons-container">
+            <button id="load-btn" class="btn">Load</button>
+            <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; width: 100%;">
+                <label for="char-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Model</label>
+                <input type="file" id="char-input" accept=".glb" hidden>
+                <label for="asset-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Asset</label>
+                <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
+                <label for="anim-input" class="btn file-label" style="width: auto;">Animation</label>
+                <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+            </div>
+            <button id="copy-btn" class="btn">Copy</button>
+        </div>
         <div id="viewer-container"></div>
         <div id="ui-container"></div>
     </div>
