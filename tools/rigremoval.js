@@ -160,7 +160,16 @@ export function init(scene, uiContainer, onBackToDashboard) {
                     }
                 });
 
+                // Clear the scene and add the new model
+                scene.children.slice().forEach(child => {
+                    if (child.type === 'Mesh' || child.type === 'Group') {
+                        scene.remove(child);
+                    }
+                });
                 scene.add(model);
+                
+                // Set initial orientation
+                model.rotation.set(-Math.PI / 2, 0, Math.PI); 
                 centerAndOrientModel(model);
                 currentModel = model;
 
@@ -234,7 +243,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 console.error('An error happened during parsing', error);
                 preparingDownloadModal.style.display = 'none';
             }, { binary: true });
-        }, 500); // Small delay to show the modal
+        }, 500);
     });
 
     dashboardBtn.addEventListener('click', () => {
