@@ -27,7 +27,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 border-bottom: 1px solid var(--border-color);
             }
             #button-bar .btn, #button-bar .file-label {
-                padding: 0.6rem;
+                padding: 1.0rem; /* Increased vertical padding */
                 font-size: 0.8rem;
                 display: flex;
                 flex-direction: column;
@@ -35,19 +35,17 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 justify-content: center;
                 gap: 4px;
             }
-            .button-icon {
-                font-size: 1.2rem;
-            }
             #tab-container {
                 display: flex;
                 overflow-x: auto;
                 padding: 10px 0;
                 border-bottom: 1px solid var(--border-color);
+                min-height: 50px; /* Increased vertical size for tabs */
             }
             .tab-btn {
                 background: transparent;
                 border: none;
-                padding: 10px 16px; /* Slightly larger padding for vertical sizing */
+                padding: 10px 16px; 
                 cursor: pointer;
                 color: var(--secondary-text-color);
                 font-weight: bold;
@@ -61,7 +59,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 border-bottom-color: var(--primary-color);
             }
             #control-panels-container {
-                flex-grow: 1; /* This is the key change */
+                flex-grow: 1; 
                 overflow-y: auto;
                 padding-top: 15px;
             }
@@ -142,22 +140,13 @@ export function init(scene, uiContainer, onBackToDashboard) {
         </style>
         <div id="attachment-rig-ui">
             <div id="button-bar">
-                <label for="char-input" class="file-label">
-                    <span class="button-icon">📁</span>
-                    <span>Model</span>
-                </label>
+                <label for="char-input" class="file-label">Load Model</label>
                 <input type="file" id="char-input" accept=".glb" hidden>
 
-                <label for="asset-input" class="file-label">
-                    <span class="button-icon">📦</span>
-                    <span>Asset</span>
-                </label>
+                <label for="asset-input" class="file-label">Load Asset</label>
                 <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
 
-                <label for="anim-input" class="file-label">
-                    <span class="button-icon">🎬</span>
-                    <span>Anim</span>
-                </label>
+                <label for="anim-input" class="file-label">Load Anim</label>
                 <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
                 
                 <button class="btn" id="copy-code-btn">Copy</button>
