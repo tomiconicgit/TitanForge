@@ -8,6 +8,12 @@ const viewerContainer = document.getElementById('viewer-container');
 const uiContainer = document.getElementById('ui-container');
 const dashboardBtn = document.getElementById('dashboard-btn');
 const floatingButtonsContainer = document.getElementById('floating-buttons-container');
+const loadBtn = document.getElementById('load-btn');
+const loadDropdown = document.getElementById('load-dropdown');
+const copyBtn = document.getElementById('copy-btn');
+const charInput = document.getElementById('char-input');
+const assetInput = document.getElementById('asset-input');
+const animInput = document.getElementById('anim-input');
 
 const toolModules = {
     rigremoval: () => import('./tools/rigremoval.js'),
@@ -84,7 +90,15 @@ function showMainMenu() {
 
 async function loadTool(toolName) {
     dashboardBtn.style.display = 'block';
-    floatingButtonsContainer.style.display = 'none'; // Hide by default, tool will manage
+    
+    // Hide the dropdown and clear its event listeners
+    loadDropdown.style.display = 'none';
+    loadBtn.onclick = null;
+    copyBtn.onclick = null;
+    charInput.onchange = null;
+    assetInput.onchange = null;
+    animInput.onchange = null;
+    
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
