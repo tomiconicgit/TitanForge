@@ -16,10 +16,9 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const charInput = document.getElementById('char-input');
     const assetInput = document.getElementById('asset-input');
     const animInput = document.getElementById('anim-input');
-
+    
     floatingButtonsContainer.style.display = 'flex';
-    loadDropdown.style.display = 'none'; // Ensure dropdown is hidden initially
-
+    
     uiContainer.innerHTML = `
         <style>
             #attachment-rig-ui {
@@ -158,6 +157,31 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     const gltfLoader = new GLTFLoader();
 
+    // Event listeners for the global floating buttons
+    const loadBtn = document.getElementById('load-btn');
+    const loadDropdown = document.getElementById('load-dropdown');
+    const copyBtn = document.getElementById('copy-btn');
+    const charInput = document.getElementById('char-input');
+    const assetInput = document.getElementById('asset-input');
+    const animInput = document.getElementById('anim-input');
+    
+    loadBtn.addEventListener('click', () => {
+        loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
+    });
+    copyBtn.addEventListener('click', copyEquipment);
+    charInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadGLB(e.target.files, true);
+    });
+    assetInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadGLB(e.target.files, false);
+    });
+    animInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadAnimation(e.target.files[0]);
+    });
+    
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
@@ -299,7 +323,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         tab.textContent = objectData.mesh.name;
         tab.dataset.id = objectData.mesh.uuid;
         tab.onclick = () => setActiveObject(objectData.mesh.uuid);
-        floatingTabContainer.appendChild(tab);
+        tabContainer.appendChild(tab);
 
         const panel = document.createElement('div');
         panel.className = 'panel';
@@ -412,11 +436,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
-    charInput.addEventListener('change', (e) => loadGLB(e.target.files, true));
-    assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
-    animInput.addEventListener('change', (e) => loadAnimation(e.target.files[0]));
-    copyBtn.addEventListener('click', copyEquipment);
-    
+    // Event Listeners
     playPauseBtn.addEventListener('click', () => {
         if (!mainCharacter || !mainCharacter.mixer) return;
         mainCharacter.isPaused = !mainCharacter.isPaused;
@@ -435,6 +455,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     stepFwdBtn.addEventListener('click', () => step(1/60));
     stepBackBtn.addEventListener('click', () => step(-1/60));
     
+    // Animation loop for the attachment rig tool
     const animateTool = () => {
         requestAnimationFrame(animateTool);
         const delta = clock.getDelta();
