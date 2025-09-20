@@ -144,13 +144,15 @@ export function init(scene, uiContainer, onBackToDashboard) {
         const staticModel = new THREE.Group();
         originalModel.traverse(child => {
             if (child.isSkinnedMesh) {
-                const newMesh = new THREE.Mesh(child.geometry, child.material.clone());
+                // Clone the geometry and material to ensure no shared references
+                const newMesh = new THREE.Mesh(child.geometry.clone(), child.material.clone());
                 newMesh.position.copy(child.position);
                 newMesh.rotation.copy(child.rotation);
                 newMesh.scale.copy(child.scale);
                 staticModel.add(newMesh);
             }
             else if (child.isMesh) {
+                // Standard meshes can be cloned directly
                 const newMesh = child.clone();
                 staticModel.add(newMesh);
             }
