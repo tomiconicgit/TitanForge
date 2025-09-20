@@ -9,7 +9,7 @@
         &quot;short_name&quot;: &quot;TitanForge&quot;,
         &quot;start_url&quot;: &quot;.&quot;,
         &quot;display&quot;: &quot;standalone&quot;,
-        &quot;background_color&quot;: &quot;#d0d0d0&quot;,
+        &quot;background_color&quot;: &quot;#1c1c1e&quot;,
         &quot;theme_color&quot;: &quot;#3a79cc&quot;,
         &quot;description&quot;: &quot;A powerful suite of tools for 3D model editing.&quot;,
         &quot;icons&quot;: [{
@@ -20,11 +20,18 @@
     }">
     <style>
         :root {
-            --viewer-bg: #f0f0f0; --ui-bg: rgba(255, 255, 255, 0.5); --panel-bg: rgba(255, 255, 255, 0.8);
-            --primary-color: #007aff; --text-color: #1d1d1f; --border-color: rgba(210, 210, 215, 0.5);
-            --shadow-color: rgba(0, 0, 0, 0.1); --error-color: #d93025;
-            --ios-glass-bg: rgba(255, 255, 255, 0.7);
-            --ios-glass-border: rgba(210, 210, 215, 0.7);
+            /* Dark Mode Variables */
+            --viewer-bg: #1c1c1e;
+            --ui-bg: rgba(28, 28, 30, 0.7);
+            --panel-bg: rgba(44, 44, 46, 0.8);
+            --primary-color: #0a84ff;
+            --text-color: #f2f2f7;
+            --secondary-text-color: #92929a;
+            --border-color: rgba(60, 60, 67, 0.5);
+            --shadow-color: rgba(0, 0, 0, 0.3);
+            --error-color: #ff453a;
+            --ios-glass-bg: rgba(28, 28, 30, 0.8);
+            --ios-glass-border: rgba(60, 60, 67, 0.7);
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
@@ -32,6 +39,7 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex; flex-direction: column; background-color: var(--viewer-bg);
             touch-action: none;
+            color: var(--text-color);
         }
         #app-container {
             flex-grow: 1; display: flex; flex-direction: column; position: relative;
@@ -44,8 +52,8 @@
         #ui-container {
             flex-shrink: 0;
             height: 40vh;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             background: var(--ui-bg);
             border-top: 1px solid var(--border-color);
             padding: 1rem;
@@ -53,46 +61,57 @@
             display: flex;
             flex-direction: column;
             gap: 1rem;
+            color: var(--text-color);
         }
         #loading-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--viewer-bg); z-index: 1000;
+            background-color: var(--viewer-bg); z-index: 1000;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
         }
         .loading-title {
             font-size: 2rem; font-weight: bold; color: var(--text-color); margin-bottom: 2rem;
         }
         #loading-bar-container {
-            width: 80%; max-width: 400px; height: 8px; background: #e9e9eb; border-radius: 4px; overflow: hidden;
+            width: 80%; max-width: 400px; height: 8px; background: rgba(60, 60, 67, 0.3); border-radius: 4px; overflow: hidden;
         }
         #loading-progress {
             height: 100%; width: 0; background: var(--primary-color); transition: width 0.3s ease;
         }
         #loading-text {
-            margin-top: 10px; font-size: 0.9rem; color: #636366; text-align: center;
+            margin-top: 10px; font-size: 0.9rem; color: var(--secondary-text-color); text-align: center;
         }
         #process-log {
             margin-top: 20px; width: 80%; max-width: 400px; height: 150px;
-            background: rgba(0, 0, 0, 0.05); border-radius: 8px; padding: 10px;
-            font-size: 0.8rem; color: #333; overflow-y: scroll;
+            background: rgba(60, 60, 67, 0.2); border-radius: 8px; padding: 10px;
+            font-size: 0.8rem; color: var(--secondary-text-color); overflow-y: scroll;
         }
         .btn {
             display: block; width: 100%; padding: 0.8rem; border: none;
-            border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+            border-radius: 12px;
+            font-size: 0.9rem; font-weight: 600;
             text-align: center; cursor: pointer;
-            background-color: var(--primary-color); color: white;
-            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+            background-color: var(--primary-color);
+            color: white;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        .btn:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
         }
-        .btn:active {
-            transform: translateY(1px);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        .btn:active:not(:disabled) {
+            transform: scale(0.98);
+            background-color: #0060d0;
         }
         .btn.dashboard {
-            background-color: #6c757d;
+            background-color: rgba(60, 60, 67, 0.5);
+            color: var(--text-color);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
         .card {
             background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem;
@@ -100,18 +119,34 @@
         }
         .file-label {
             display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color);
-            border-radius: 8px; font-size: 0.9rem; font-weight: 500;
-            text-align: center; cursor: pointer; transition: all 0.2s ease;
-            background-color: #e9e9eb; color: var(--text-color);
+            border-radius: 12px; font-size: 0.9rem; font-weight: 500;
+            text-align: center; cursor: pointer;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            background-color: var(--panel-bg);
+            color: var(--text-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .file-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .file-label:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
         .file-label.disabled {
-            background-color: #e9e9eb !important; color: #8e8e93 !important; cursor: not-allowed; opacity: 0.7;
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
         .status-log {
-            font-size: 0.85rem; text-align: center; color: #636366; padding: 0.5rem;
-            background-color: #e9e9eb; border-radius: 6px; margin-top: auto; transition: all 0.3s ease;
+            font-size: 0.85rem; text-align: center; color: var(--secondary-text-color); padding: 0.5rem;
+            background-color: var(--panel-bg); border-radius: 6px; margin-top: auto; transition: all 0.3s ease;
         }
-        .status-log.error { background-color: #fdd8d6; color: var(--error-color); }
+        .status-log.error { background-color: #ff453a; color: white; }
+
         .fade-in {
             animation: fade-in 1s forwards;
             opacity: 0;
@@ -119,6 +154,14 @@
         @keyframes fade-in {
             from { opacity: 0; }
             to { opacity: 1; }
+        }
+        .fade-out {
+            animation: fade-out 1s forwards;
+            opacity: 1;
+        }
+        @keyframes fade-out {
+            from { opacity: 1; }
+            to { opacity: 0; }
         }
     </style>
 </head>
