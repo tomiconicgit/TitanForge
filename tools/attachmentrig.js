@@ -4,12 +4,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 export function init(scene, uiContainer, onBackToDashboard) {
-    // Local state
     const clock = new THREE.Clock();
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
-    let currentMode = 'equipment'; // Kept for future expansion if needed
 
     uiContainer.innerHTML = `
         <style>
@@ -27,7 +25,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 border-bottom: 1px solid var(--border-color);
             }
             #button-bar .btn, #button-bar .file-label {
-                padding: 1.0rem; /* Increased vertical padding */
+                padding: 1.0rem;
                 font-size: 0.8rem;
                 display: flex;
                 flex-direction: column;
@@ -40,12 +38,12 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 overflow-x: auto;
                 padding: 10px 0;
                 border-bottom: 1px solid var(--border-color);
-                min-height: 50px; /* Increased vertical size for tabs */
+                min-height: 50px;
             }
             .tab-btn {
                 background: transparent;
                 border: none;
-                padding: 10px 16px; 
+                padding: 10px 16px;
                 cursor: pointer;
                 color: var(--secondary-text-color);
                 font-weight: bold;
@@ -59,7 +57,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 border-bottom-color: var(--primary-color);
             }
             #control-panels-container {
-                flex-grow: 1; 
+                flex-grow: 1;
                 overflow-y: auto;
                 padding-top: 15px;
             }
@@ -168,7 +166,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
         </div>
     `;
 
-    // Get UI elements
     const charInput = document.getElementById('char-input');
     const assetInput = document.getElementById('asset-input');
     const animInput = document.getElementById('anim-input');
@@ -182,10 +179,8 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const mainModal = document.getElementById('main-modal');
     const modalContent = document.getElementById('modal-content');
     
-    // Core Three.js dependencies
     const gltfLoader = new GLTFLoader();
 
-    // Utility functions
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
@@ -440,12 +435,11 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
-    // Event Listeners
     charInput.addEventListener('change', (e) => loadGLB(e.target.files, true));
     assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
     animInput.addEventListener('change', (e) => loadAnimation(e.target.files[0]));
     copyCodeBtn.addEventListener('click', copyEquipment);
-
+    
     playPauseBtn.addEventListener('click', () => {
         if (!mainCharacter || !mainCharacter.mixer) return;
         mainCharacter.isPaused = !mainCharacter.isPaused;
@@ -464,7 +458,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     stepFwdBtn.addEventListener('click', () => step(1/60));
     stepBackBtn.addEventListener('click', () => step(-1/60));
     
-    // Animation loop for the attachment rig tool
     const animateTool = () => {
         requestAnimationFrame(animateTool);
         const delta = clock.getDelta();
