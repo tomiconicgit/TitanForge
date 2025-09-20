@@ -1,10 +1,10 @@
+// tools/attachmentrig.js
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export function initAttachmentRigTool(scene, viewerContainer) {
-    const uiContainer = document.getElementById('tools-container');
-    uiContainer.innerHTML = `
+    const toolsContainer = document.getElementById('tools-container');
+    toolsContainer.innerHTML = `
         <style>
             .nav-btn { flex-grow: 1; padding: 12px; border: none; background: transparent; font-size: 16px; font-weight: bold; cursor: pointer; border-bottom: 3px solid transparent; }
             .nav-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
