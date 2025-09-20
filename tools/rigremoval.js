@@ -144,8 +144,17 @@ export function init(scene, uiContainer, onBackToDashboard) {
         logStatus('Processing: Removing rig...');
         const staticModel = new THREE.Group();
         originalModel.traverse(child => {
-            if (child.isSkinnedMesh) staticModel.add(new THREE.Mesh(child.geometry, child.material.clone()));
-            else if (child.isMesh) staticModel.add(child.clone());
+            if (child.isSkinnedMesh) {
+                const newMesh = new THREE.Mesh(child.geometry, child.material.clone());
+                newMesh.position.copy(child.position);
+                newMesh.rotation.copy(child.rotation);
+                newMesh.scale.copy(child.scale);
+                staticModel.add(newMesh);
+            }
+            else if (child.isMesh) {
+                const newMesh = child.clone();
+                staticModel.add(newMesh);
+            }
         });
         staticModel.applyMatrix4(originalModel.matrixWorld);
         scene.remove(currentModel);
