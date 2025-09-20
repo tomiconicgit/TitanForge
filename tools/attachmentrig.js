@@ -4,11 +4,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 export function init(scene, uiContainer, onBackToDashboard) {
+    // Local state
     const clock = new THREE.Clock();
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
+    let currentMode = 'equipment';
 
+    // UI for the tool is now structured with a floating tab bar
     uiContainer.innerHTML = `
         <style>
             #attachment-rig-ui {
@@ -16,6 +19,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 flex-direction: column;
                 height: 100%;
                 color: var(--text-color);
+                position: relative;
             }
             #button-bar {
                 display: grid;
@@ -23,6 +27,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 gap: 10px;
                 padding-bottom: 10px;
                 border-bottom: 1px solid var(--border-color);
+                z-index: 2; /* Ensure buttons are above the floating tabs */
             }
             #button-bar .btn, #button-bar .file-label {
                 padding: 1.0rem;
@@ -33,17 +38,23 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 justify-content: center;
                 gap: 4px;
             }
-            #tab-container {
+            #floating-tab-container {
+                position: absolute;
+                bottom: 40vh; /* Position it above the tool panel */
+                width: 100%;
                 display: flex;
                 overflow-x: auto;
-                padding: 10px 0;
-                border-bottom: 1px solid var(--border-color);
-                min-height: 50px;
+                background: rgba(28, 28, 30, 0.5); /* Semi-transparent background */
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border-top: 1px solid var(--border-color);
+                padding: 5px;
+                z-index: 1; /* Under the buttons but above the viewer */
             }
             .tab-btn {
                 background: transparent;
                 border: none;
-                padding: 10px 16px;
+                padding: 10px 16px; 
                 cursor: pointer;
                 color: var(--secondary-text-color);
                 font-weight: bold;
@@ -57,9 +68,10 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 border-bottom-color: var(--primary-color);
             }
             #control-panels-container {
-                flex-grow: 1;
+                flex-grow: 1; 
                 overflow-y: auto;
                 padding-top: 15px;
+                z-index: 2;
             }
             .panel {
                 display: none;
@@ -140,20 +152,15 @@ export function init(scene, uiContainer, onBackToDashboard) {
             <div id="button-bar">
                 <label for="char-input" class="file-label">Load Model</label>
                 <input type="file" id="char-input" accept=".glb" hidden>
-
                 <label for="asset-input" class="file-label">Load Asset</label>
                 <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
-
                 <label for="anim-input" class="file-label">Load Anim</label>
                 <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
-                
                 <button class="btn" id="copy-code-btn">Copy</button>
             </div>
             
-            <div id="tab-container"></div>
-            
             <div id="control-panels-container"></div>
-
+            
             <div class="anim-controls-container" style="display: none; justify-content: space-around; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 1rem;">
                 <button class="btn secondary step-back-btn" style="flex: 1;">&lt;&lt;</button>
                 <button class="btn secondary play-pause-btn" style="flex: 2;">Pause</button>
@@ -161,16 +168,19 @@ export function init(scene, uiContainer, onBackToDashboard) {
             </div>
         </div>
 
+        <div id="floating-tab-container" class="fade-in"></div>
+
         <div id="main-modal" class="modal-bg" style="display: none;">
             <div class="modal-content" id="modal-content"></div>
         </div>
     `;
 
+    // Get UI elements
     const charInput = document.getElementById('char-input');
     const assetInput = document.getElementById('asset-input');
     const animInput = document.getElementById('anim-input');
     const copyCodeBtn = document.getElementById('copy-code-btn');
-    const tabContainer = document.getElementById('tab-container');
+    const floatingTabContainer = document.getElementById('floating-tab-container');
     const controlPanelsContainer = document.getElementById('control-panels-container');
     const animControlsContainer = document.querySelector('.anim-controls-container');
     const playPauseBtn = document.querySelector('.play-pause-btn');
@@ -179,8 +189,10 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const mainModal = document.getElementById('main-modal');
     const modalContent = document.getElementById('modal-content');
     
+    // Core Three.js dependencies
     const gltfLoader = new GLTFLoader();
 
+    // Utility functions
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
@@ -195,7 +207,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         sceneObjects.forEach(data => scene.remove(data.mesh));
         sceneObjects.clear();
         mainCharacter = null;
-        tabContainer.innerHTML = '';
+        floatingTabContainer.innerHTML = '';
         controlPanelsContainer.innerHTML = '';
         animControlsContainer.style.display = 'none';
         activeObjectId = null;
@@ -322,7 +334,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         tab.textContent = objectData.mesh.name;
         tab.dataset.id = objectData.mesh.uuid;
         tab.onclick = () => setActiveObject(objectData.mesh.uuid);
-        tabContainer.appendChild(tab);
+        floatingTabContainer.appendChild(tab);
 
         const panel = document.createElement('div');
         panel.className = 'panel';
@@ -405,7 +417,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     const setActiveObject = (id) => {
         activeObjectId = id;
-        document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
+        document.querySelectorAll('#floating-tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
         document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id));
     };
 
@@ -435,11 +447,12 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
+    // Event Listeners
     charInput.addEventListener('change', (e) => loadGLB(e.target.files, true));
     assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
     animInput.addEventListener('change', (e) => loadAnimation(e.target.files[0]));
     copyCodeBtn.addEventListener('click', copyEquipment);
-    
+
     playPauseBtn.addEventListener('click', () => {
         if (!mainCharacter || !mainCharacter.mixer) return;
         mainCharacter.isPaused = !mainCharacter.isPaused;
@@ -458,6 +471,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
     stepFwdBtn.addEventListener('click', () => step(1/60));
     stepBackBtn.addEventListener('click', () => step(-1/60));
     
+    // Animation loop for the attachment rig tool
     const animateTool = () => {
         requestAnimationFrame(animateTool);
         const delta = clock.getDelta();
