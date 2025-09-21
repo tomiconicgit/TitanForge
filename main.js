@@ -3,17 +3,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
-let currentToolModule = null; 
+let activeToolCleanup = null; // MODIFIED: To store the returned cleanup function
+
 const viewerContainer = document.getElementById('viewer-container');
 const uiContainer = document.getElementById('ui-container');
 const dashboardBtn = document.getElementById('dashboard-btn');
 const floatingButtonsContainer = document.getElementById('floating-buttons-container');
-
-// Get cleanup screen elements
 const cleanupScreen = document.getElementById('cleanup-screen');
 const cleanupLog = document.getElementById('cleanup-log');
-
-// NEW: Get tool loading screen elements
 const toolLoadingScreen = document.getElementById('tool-loading-screen');
 const toolLoadingLog = document.getElementById('tool-loading-log');
 
@@ -70,19 +67,21 @@ function logCleanup(message) { cleanupLog.innerHTML += `> ${message}\n`; cleanup
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 function logToolLoad(message) { toolLoadingLog.innerHTML += `> ${message}\n`; toolLoadingLog.scrollTop = toolLoadingLog.scrollHeight; }
 
-async function beginCleanupTransition() { /* ... function is unchanged ... */
+async function beginCleanupTransition() {
     cleanupScreen.style.display = 'flex';
     cleanupLog.innerHTML = '';
     logCleanup("Starting cleanup...");
     await delay(200);
-    if (currentToolModule && typeof currentToolModule.cleanup === 'function') {
-        const cleanupMessage = currentToolModule.cleanup();
+
+    if (typeof activeToolCleanup === 'function') {
+        const cleanupMessage = activeToolCleanup(); // MODIFIED: Call the stored cleanup function
         logCleanup(cleanupMessage);
-        currentToolModule = null;
+        activeToolCleanup = null;
     } else {
         logCleanup("No active tool to clean up.");
     }
     await delay(500);
+
     const objectsToRemove = scene.children.filter(child => (child.isMesh || child.isGroup || child.isSkinnedMesh || child.isBone) && child.name !== 'main_floor');
     objectsToRemove.forEach(child => scene.remove(child));
     logCleanup(`Removed ${objectsToRemove.length} object(s) from scene.`);
@@ -98,40 +97,23 @@ async function beginCleanupTransition() { /* ... function is unchanged ... */
     showMainMenu();
 }
 
-// MODIFIED: The dashboard buttons now call the new transition function
-function showMainMenu() {
-    uiContainer.innerHTML = `
-        <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
-            <h2>Choose a Tool</h2>
-            <button class="btn" id="rigremoval-btn">Rig Removal Tool</button>
-            <button class="btn" id="attachmentrig-btn">Attachment Rig Tool</button>
-        </div>
-    `;
-
-    document.getElementById('rigremoval-btn').addEventListener('click', () => {
-        beginToolLoadTransition('rigremoval');
-    });
-
-    document.getElementById('attachmentrig-btn').addEventListener('click', () => {
-        beginToolLoadTransition('attachmentrig');
-    });
+function showMainMenu() { /* ... function is unchanged ... */
+    uiContainer.innerHTML = `<div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;"><h2>Choose a Tool</h2><button class="btn" id="rigremoval-btn">Rig Removal Tool</button><button class="btn" id="attachmentrig-btn">Attachment Rig Tool</button></div>`;
+    document.getElementById('rigremoval-btn').addEventListener('click', () => { beginToolLoadTransition('rigremoval'); });
+    document.getElementById('attachmentrig-btn').addEventListener('click', () => { beginToolLoadTransition('attachmentrig'); });
 }
 
-// NEW: The tool loading sequence
-async function beginToolLoadTransition(toolName) {
+async function beginToolLoadTransition(toolName) { /* ... function is unchanged ... */
     toolLoadingScreen.style.display = 'flex';
     toolLoadingLog.innerHTML = '';
     logToolLoad(`Preparing to load: ${toolName}...`);
     await delay(500);
-
-    await loadTool(toolName); // Wait for the tool to finish its setup
-    
+    await loadTool(toolName);
     logToolLoad("Tool loaded successfully!");
     await delay(750);
     toolLoadingScreen.style.display = 'none';
 }
 
-// MODIFIED: loadTool is now focused only on the loading logic
 async function loadTool(toolName) {
     logToolLoad("Showing main UI components...");
     viewerContainer.style.display = 'block';
@@ -140,13 +122,12 @@ async function loadTool(toolName) {
     try {
         logToolLoad(`Importing '${toolName}.js' module...`);
         const module = await toolModules[toolName]();
-        currentToolModule = module;
-
+        
         logToolLoad("Initializing tool...");
         await delay(250);
         
-        // The init function now sets up the UI
-        module.init(scene, uiContainer, beginCleanupTransition);
+        // MODIFIED: module.init now returns the cleanup function
+        activeToolCleanup = module.init(scene, uiContainer, beginCleanupTransition);
         
     } catch (error) {
         logToolLoad(`ERROR: Failed to load tool. See console for details.`);
