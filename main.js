@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
-let currentToolInstance = null;
+let currentToolModule = null; // Changed from currentToolInstance
 const viewerContainer = document.getElementById('viewer-container');
 const uiContainer = document.getElementById('ui-container');
 const dashboardBtn = document.getElementById('dashboard-btn');
@@ -38,6 +38,7 @@ function init3DViewer() {
     const floor = new THREE.Mesh( new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x999999, depthWrite: false }) );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
+    floor.name = 'main_floor'; // Give the floor a name to identify it
     scene.add(floor);
 
     controls = new OrbitControls(camera, renderer.domElement);
@@ -62,7 +63,21 @@ function animate() {
     renderer.render(scene, camera);
 }
 
+function cleanUpCurrentTool() {
+    if (currentToolModule && typeof currentToolModule.cleanup === 'function') {
+        currentToolModule.cleanup();
+    }
+    currentToolModule = null;
+
+    // Clean up tool-specific objects from the scene, but not lights or the floor
+    const objectsToRemove = scene.children.filter(child => 
+        (child.isMesh || child.isGroup || child.isSkinnedMesh || child.isBone) && child.name !== 'main_floor'
+    );
+    objectsToRemove.forEach(child => scene.remove(child));
+}
+
 function showMainMenu() {
+    cleanUpCurrentTool(); // Clean up before showing the menu
     dashboardBtn.style.display = 'none';
     floatingButtonsContainer.style.display = 'none';
     uiContainer.innerHTML = `
@@ -83,23 +98,19 @@ function showMainMenu() {
 }
 
 async function loadTool(toolName) {
+    cleanUpCurrentTool(); // Clean up any previous tool state
+
     dashboardBtn.style.display = 'block';
-    // floatingButtonsContainer.style.display is controlled by the tool
+    
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
             <p>Loading tool: ${toolName}...</p>
         </div>
     `;
-    
-    scene.children.slice().forEach(child => {
-        if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh' || child.type === 'Bone') {
-            scene.remove(child);
-        }
-    });
 
     try {
         const module = await toolModules[toolName]();
-        currentToolInstance = module;
+        currentToolModule = module; // Store the loaded module
         module.init(scene, uiContainer, showMainMenu);
 
     } catch (error) {
