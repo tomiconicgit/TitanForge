@@ -90,6 +90,16 @@
             transform: scale(0.98);
             background-color: #0060d0;
         }
+        .btn.dashboard {
+            background-color: rgba(60, 60, 67, 0.5);
+            color: var(--text-color);
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: auto;
+            padding: 0.5rem 1rem;
+            z-index: 10;
+        }
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -123,12 +133,6 @@
             transform: none;
             box-shadow: none;
         }
-        .status-log {
-            font-size: 0.85rem; text-align: center; color: var(--secondary-text-color); padding: 0.5rem;
-            background-color: var(--panel-bg); border-radius: 6px; margin-top: auto; transition: all 0.3s ease;
-        }
-        .status-log.error { background-color: #ff453a; color: white; }
-
         .fade-in {
             animation: fade-in 1s forwards;
             opacity: 0;
