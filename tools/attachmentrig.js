@@ -137,8 +137,53 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
-    const loadAnimation = (file) => { /* ... function is unchanged ... */ };
+    const loadAnimation = (file) => {
+        if (!file || !mainCharacter) {
+            alert("Please load a character model first!");
+            return;
+        }
+        showModal(`<h2 class="modal-title">Loading Animation</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            gltfLoader.parse(e.target.result, '', (gltf) => {
+                const clip = gltf.animations[0];
+                if (!clip) {
+                    showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>This GLB file contains no animations.</p><button class="btn" onclick="hideModal()">OK</button>`);
+                    return;
+                }
+                if (!mainCharacter.mixer) mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh);
+                if (mainCharacter.activeAction) mainCharacter.activeAction.stop();
+                const action = mainCharacter.mixer.clipAction(clip);
+                action.setLoop(THREE.LoopRepeat, Infinity).play();
+                mainCharacter.activeAction = action;
+                mainCharacter.isPaused = false;
+                mainCharacter.mixer.timeScale = 1;
+                playPauseBtn.textContent = 'Pause';
+                animControlsContainer.style.display = 'flex';
+                hideModal();
+            }, (error) => {
+                showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to load animation file: ${error.message}</p><button class="btn" onclick="hideModal()">OK</button>`);
+                console.error(error);
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    };
     
+    // --- START: THESE FUNCTIONS WERE MISSING ---
+    const createUIForObject = (objectData) => {
+        const tab = document.createElement('button');
+        tab.className = 'tab-btn';
+        tab.textContent = objectData.mesh.name;
+        tab.dataset.id = objectData.mesh.uuid;
+        tab.onclick = () => setActiveObject(objectData.mesh.uuid);
+        tabContainer.appendChild(tab);
+        const panel = document.createElement('div');
+        panel.className = 'panel';
+        panel.dataset.id = objectData.mesh.uuid;
+        controlPanelsContainer.appendChild(panel);
+        renderPanelContent(objectData);
+    };
+
     const renderPanelContent = (objectData) => {
         const { mesh } = objectData;
         const panel = document.querySelector(`.panel[data-id="${mesh.uuid}"]`);
@@ -172,25 +217,58 @@ export function init(scene, uiContainer, onBackToDashboard) {
         panel.innerHTML = panelHTML;
         addEventListenersToPanel(panel, objectData);
     };
-
-    const createUIForObject = (objectData) => {
-        const tab = document.createElement('button');
-        tab.className = 'tab-btn';
-        tab.textContent = objectData.mesh.name;
-        tab.dataset.id = objectData.mesh.uuid;
-        tab.onclick = () => setActiveObject(objectData.mesh.uuid);
-        tabContainer.appendChild(tab);
-        const panel = document.createElement('div');
-        panel.className = 'panel';
-        panel.dataset.id = objectData.mesh.uuid;
-        controlPanelsContainer.appendChild(panel);
-        renderPanelContent(objectData);
+    
+    const addEventListenersToPanel = (panel, objectData) => {
+        const { mesh } = objectData;
+        panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(input => {
+            input.addEventListener('input', () => {
+                const getVal = (id) => parseFloat(panel.querySelector(`[data-uuid="${objectData.mesh.uuid}"][id^="${id}-"]`).value);
+                mesh.position.set(getVal('pos-x'), getVal('pos-y'), getVal('pos-z'));
+                mesh.rotation.set(
+                    THREE.MathUtils.degToRad(getVal('rot-x')),
+                    THREE.MathUtils.degToRad(getVal('rot-y')),
+                    THREE.MathUtils.degToRad(getVal('rot-z'))
+                );
+                const scale = getVal('scale-all');
+                mesh.scale.set(scale, scale, scale);
+                if (input.type === 'range') {
+                    panel.querySelector(`#${input.id.replace(/-range$/, '-num')}`).value = input.value;
+                }
+                if (input.type === 'number') {
+                    panel.querySelector(`#${input.id.replace(/-num$/, '-range')}`).value = input.value;
+                }
+            });
+        });
+        const attachmentSelect = panel.querySelector('.attachment-select');
+        if (attachmentSelect) {
+            attachmentSelect.addEventListener('change', (e) => {
+                const boneName = e.target.value;
+                if (boneName === 'scene') {
+                    scene.attach(mesh);
+                } else {
+                    const bone = mainCharacter.mesh.getObjectByName(boneName);
+                    if (bone) bone.attach(mesh);
+                }
+            });
+        }
     };
     
-    const addEventListenersToPanel = (panel, objectData) => { const { mesh } = objectData; panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(input => { input.addEventListener('input', () => { const getVal = (id) => parseFloat(panel.querySelector(`[data-uuid="${objectData.mesh.uuid}"][id^="${id}-"]`).value); mesh.position.set(getVal('pos-x'), getVal('pos-y'), getVal('pos-z')); mesh.rotation.set(THREE.MathUtils.degToRad(getVal('rot-x')), THREE.MathUtils.degToRad(getVal('rot-y')), THREE.MathUtils.degToRad(getVal('rot-z'))); const scale = getVal('scale-all'); mesh.scale.set(scale, scale, scale); if (input.type === 'range') { panel.querySelector(`#${input.id.replace(/-range$/, '-num')}`).value = input.value; } if (input.type === 'number') { panel.querySelector(`#${input.id.replace(/-num$/, '-range')}`).value = input.value; } }); }); const attachmentSelect = panel.querySelector('.attachment-select'); if (attachmentSelect) { attachmentSelect.addEventListener('change', (e) => { const boneName = e.target.value; if (boneName === 'scene') scene.attach(mesh); else { const bone = mainCharacter.mesh.getObjectByName(boneName); if (bone) bone.attach(mesh); } }); } };
-    const createSlider = (id, label, value, min, max, step, uuid) => { const uniqueId = `${id}-${uuid}`; return `<div class="slider-container"><label>${label}</label><input type="range" id="${uniqueId}-range" data-uuid="${uuid}" min="${min}" max="${max}" step="${step}" value="${value}" style="flex-grow: 1;"><input type="number" id="${uniqueId}-num" data-uuid="${uuid}" value="${value}" step="${step}"></div>`; };
-    const setActiveObject = (id) => { activeObjectId = id; document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id)); document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id)); };
-    
+    const createSlider = (id, label, value, min, max, step, uuid) => {
+        const uniqueId = `${id}-${uuid}`;
+        return `<div class="slider-container">
+                    <label>${label}</label>
+                    <input type="range" id="${uniqueId}-range" data-uuid="${uuid}" min="${min}" max="${max}" step="${step}" value="${value}" style="flex-grow: 1;">
+                    <input type="number" id="${uniqueId}-num" data-uuid="${uuid}" value="${value}" step="${step}">
+                </div>`;
+    };
+
+    const setActiveObject = (id) => {
+        activeObjectId = id;
+        document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
+        document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id));
+    };
+    // --- END: MISSING FUNCTIONS ---
+
     const copyAssetInfo = () => {
         if (!activeObjectId || !sceneObjects.has(activeObjectId)) return alert("Please select an asset.");
         const { mesh, type } = sceneObjects.get(activeObjectId);
