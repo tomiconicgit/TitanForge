@@ -52,6 +52,8 @@
         .btn.dashboard { background-color: rgba(60, 60, 67, 0.5); color: var(--text-color); position: absolute; top: 1rem; right: 1rem; width: auto; padding: 0.5rem 1rem; display: none; z-index: 10; }
         #floating-buttons-container { position: absolute; top: 1rem; left: 1rem; z-index: 10; display: none; flex-direction: row; gap: 0.5rem; }
         #floating-buttons-container .btn { width: auto; padding: 0.5rem 1rem; }
+        .file-label { display: block; width: 100%; padding: 0.8rem; border: none; border-radius: 12px; font-size: 0.9rem; font-weight: 600; text-align: center; cursor: pointer; background-color: var(--primary-color); color: white; transition: background-color 0.2s ease; }
+        .file-label:hover { background-color: #0060d0; }
         .fade-in { animation: fade-in 1s forwards; opacity: 0; }
         @keyframes fade-in { to { opacity: 1; } }
         .fade-out { animation: fade-out 1s forwards; opacity: 1; }
@@ -108,11 +110,11 @@
         <div id="floating-buttons-container">
             <button id="load-btn" class="btn">Load</button>
             <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; min-width: 150px;">
-                <label for="char-input" class="file-label" style="margin-bottom: 0.5rem;">Model</label>
+                <label for="char-input" class="file-label" style="margin-bottom: 0.5rem;">Load Model</label>
                 <input type="file" id="char-input" accept=".glb" hidden>
-                <label for="asset-input" class="file-label" style="margin-bottom: 0.5rem;">Asset</label>
+                <label for="asset-input" class="file-label" style="margin-bottom: 0.5rem;">Load Asset</label>
                 <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
-                <label for="anim-input" class="file-label">Animation</label>
+                <label for="anim-input" class="file-label">Load Animation</label>
                 <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
             </div>
             <button id="copy-btn" class="btn">Copy</button>
