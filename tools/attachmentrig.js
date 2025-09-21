@@ -1,50 +1,40 @@
 // tools/attachmentrig.js
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
-let animationFrameId; // To hold the animation frame ID
-let eventListeners = []; // To store references to our listeners
-
-// We need to define event handler functions so we can remove them later
-const handleLoadBtnClick = (event) => {
-    const loadDropdown = document.getElementById('load-dropdown');
-    event.stopPropagation();
-    const isHidden = loadDropdown.style.display === 'none';
-    loadDropdown.style.display = isHidden ? 'block' : 'none';
-};
-
-const handleWindowClick = () => {
-    const loadDropdown = document.getElementById('load-dropdown');
-    if (loadDropdown && loadDropdown.style.display === 'block') {
-        loadDropdown.style.display = 'none';
-    }
-};
-
-export function cleanup() {
-    console.log("Cleaning up Attachment Rig tool...");
-    cancelAnimationFrame(animationFrameId); // Stop the animation loop
-    
-    // Remove all event listeners we added
-    eventListeners.forEach(({ target, type, handler }) => {
-        target.removeEventListener(type, handler);
-    });
-    eventListeners = []; // Clear the array
-    
-    const floatingButtonsContainer = document.getElementById('floating-buttons-container');
-    if (floatingButtonsContainer) {
-        floatingButtonsContainer.style.display = 'none';
-    }
-    // NEW PART ADDED FOR DEBUGGER
-    return "Attachment Rig listeners & animations stopped.";
-}
+// REMOVED: Global state variables like eventListeners and animationFrameId are gone.
 
 export function init(scene, uiContainer, onBackToDashboard) {
+    // STATE IS NOW LOCAL: All state is contained within the init function.
+    let animationFrameId;
+    const eventListeners = [];
     const clock = new THREE.Clock();
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
 
+    // Helper to track listeners locally
+    function addTrackedListener(target, type, handler) {
+        target.addEventListener(type, handler);
+        eventListeners.push({ target, type, handler });
+    }
+
+    // Define handlers locally
+    const handleLoadBtnClick = (event) => {
+        const loadDropdown = document.getElementById('load-dropdown');
+        event.stopPropagation();
+        const isHidden = loadDropdown.style.display === 'none';
+        loadDropdown.style.display = isHidden ? 'block' : 'none';
+    };
+
+    const handleWindowClick = () => {
+        const loadDropdown = document.getElementById('load-dropdown');
+        if (loadDropdown && loadDropdown.style.display === 'block') {
+            loadDropdown.style.display = 'none';
+        }
+    };
+
+    // --- UI AND ELEMENT SELECTION ---
     const floatingButtonsContainer = document.getElementById('floating-buttons-container');
     const loadBtn = document.getElementById('load-btn');
     const copyBtn = document.getElementById('copy-btn');
@@ -93,62 +83,35 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const playPauseBtn = document.querySelector('.play-pause-btn');
     const stepFwdBtn = document.querySelector('.step-fwd-btn');
     const stepBackBtn = document.querySelector('.step-back-btn');
-    const mainModal = document.getElementById('main-modal');
-    const modalContent = document.getElementById('modal-content');
     
     const gltfLoader = new GLTFLoader();
 
-    const showModal = (contentHTML) => { modalContent.innerHTML = contentHTML; mainModal.style.display = 'flex'; };
-    const hideModal = () => { mainModal.style.display = 'none'; modalContent.innerHTML = ''; };
+    // --- LOGIC FUNCTIONS (UNCHANGED) ---
+    const showModal = (contentHTML) => { const modal = document.getElementById('main-modal'); modal.querySelector('#modal-content').innerHTML = contentHTML; modal.style.display = 'flex'; };
+    const hideModal = () => { document.getElementById('main-modal').style.display = 'none'; };
     const resetScene = () => { sceneObjects.forEach(data => scene.remove(data.mesh)); sceneObjects.clear(); mainCharacter = null; tabContainer.innerHTML = ''; controlPanelsContainer.innerHTML = ''; animControlsContainer.style.display = 'none'; activeObjectId = null; };
     const centerAndOrientModel = (model) => { const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); if (size.y > 0) model.scale.setScalar(1.65 / size.y); const scaledBox = new THREE.Box3().setFromObject(model); model.position.y -= scaledBox.min.y; };
-    const loadGLB = (files, isCharacter) => { if (!files || files.length === 0) return; const fileList = Array.from(files); fileList.forEach(file => { showModal(`<h2 class="modal-title">Loading Model</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); const reader = new FileReader(); reader.onload = (e) => { gltfLoader.parse(e.target.result, '', (gltf) => { if (isCharacter) resetScene(); const model = gltf.scene; model.name = file.name.replace(/\.[^/.]+$/, ""); model.userData.fileName = file.name; model.rotation.set(-Math.PI / 2, 0, Math.PI); centerAndOrientModel(model); model.traverse(node => { if (node.isMesh) node.castShadow = true; }); const objectData = { mesh: model, bones: [], mixer: null, activeAction: null, isPaused: true, }; model.traverse(node => { if (node.isBone) objectData.bones.push(node.name); }); sceneObjects.set(model.uuid, objectData); scene.add(model); if (isCharacter) mainCharacter = objectData; createUIForObject(objectData); setActiveObject(model.uuid); hideModal(); }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to parse GLB file: ${error.message}</p><button class="btn" onclick="location.reload()">Reload</button>`); console.error(error); }); }; reader.readAsArrayBuffer(file); }); };
-    const loadAnimation = (file) => { if (!file || !mainCharacter) { alert("Please load a character model first!"); return; } showModal(`<h2 class="modal-title">Loading Animation</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); const reader = new FileReader(); reader.onload = (e) => { gltfLoader.parse(e.target.result, '', (gltf) => { const clip = gltf.animations[0]; if (!clip) { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>This GLB file contains no animations.</p><button class="btn" onclick="hideModal()">OK</button>`); return; } if (!mainCharacter.mixer) { mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh); } if (mainCharacter.activeAction) mainCharacter.activeAction.stop(); const action = mainCharacter.mixer.clipAction(clip); action.setLoop(THREE.LoopRepeat, Infinity).play(); mainCharacter.activeAction = action; mainCharacter.isPaused = false; mainCharacter.mixer.timeScale = 1; playPauseBtn.textContent = 'Pause'; animControlsContainer.style.display = 'flex'; hideModal(); }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to load animation file: ${error.message}</p><button class="btn" onclick="hideModal()">OK</button>`); console.error(error); }); }; reader.readAsArrayBuffer(file); };
+    const loadGLB = (files, isCharacter) => { if (!files || files.length === 0) return; Array.from(files).forEach(file => { showModal(`<h2 class="modal-title">Loading Model</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); const reader = new FileReader(); reader.onload = (e) => { gltfLoader.parse(e.target.result, '', (gltf) => { if (isCharacter) resetScene(); const model = gltf.scene; model.name = file.name.replace(/\.[^/.]+$/, ""); model.userData.fileName = file.name; model.rotation.set(-Math.PI / 2, 0, Math.PI); centerAndOrientModel(model); model.traverse(node => { if (node.isMesh) node.castShadow = true; }); const objectData = { mesh: model, bones: [], mixer: null, activeAction: null, isPaused: true, }; model.traverse(node => { if (node.isBone) objectData.bones.push(node.name); }); sceneObjects.set(model.uuid, objectData); scene.add(model); if (isCharacter) mainCharacter = objectData; createUIForObject(objectData); setActiveObject(model.uuid); hideModal(); }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to parse GLB file: ${error.message}</p><button class="btn" onclick="location.reload()">Reload</button>`); console.error(error); }); }; reader.readAsArrayBuffer(file); }); };
+    const loadAnimation = (file) => { if (!file || !mainCharacter) { alert("Please load a character model first!"); return; } showModal(`<h2 class="modal-title">Loading Animation</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); const reader = new FileReader(); reader.onload = (e) => { gltfLoader.parse(e.target.result, '', (gltf) => { const clip = gltf.animations[0]; if (!clip) { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>This GLB file contains no animations.</p><button class="btn" onclick="hideModal()">OK</button>`); return; } if (!mainCharacter.mixer) mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh); if (mainCharacter.activeAction) mainCharacter.activeAction.stop(); const action = mainCharacter.mixer.clipAction(clip); action.setLoop(THREE.LoopRepeat, Infinity).play(); mainCharacter.activeAction = action; mainCharacter.isPaused = false; mainCharacter.mixer.timeScale = 1; playPauseBtn.textContent = 'Pause'; animControlsContainer.style.display = 'flex'; hideModal(); }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to load animation file: ${error.message}</p><button class="btn" onclick="hideModal()">OK</button>`); console.error(error); }); }; reader.readAsArrayBuffer(file); };
     const createUIForObject = (objectData) => { const tab = document.createElement('button'); tab.className = 'tab-btn'; tab.textContent = objectData.mesh.name; tab.dataset.id = objectData.mesh.uuid; tab.onclick = () => setActiveObject(objectData.mesh.uuid); tabContainer.appendChild(tab); const panel = document.createElement('div'); panel.className = 'panel'; panel.dataset.id = objectData.mesh.uuid; controlPanelsContainer.appendChild(panel); renderPanelContent(objectData); };
     const renderPanelContent = (objectData) => { const { mesh, bones } = objectData; const panel = document.querySelector(`.panel[data-id="${mesh.uuid}"]`); if (!panel) return; let panelHTML = ''; panelHTML += `<div class="control-group"><h3>Position</h3>${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}<h3>Rotation (Degrees)</h3>${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}<h3>Scale</h3>${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}</div>`; if (mainCharacter && objectData !== mainCharacter) { const boneOptions = mainCharacter.bones.map(name => `<option value="${name}">${name}</option>`).join(''); panelHTML += `<div class="control-group"><h3>Attachment</h3><select class="attachment-select" data-id="${mesh.uuid}"><option value="scene">-- Detach (World) --</option>${boneOptions}</select></div>`; } panel.innerHTML = panelHTML; addEventListenersToPanel(panel, objectData); };
     const addEventListenersToPanel = (panel, objectData) => { const { mesh } = objectData; panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(input => { input.addEventListener('input', () => { const getVal = (id) => parseFloat(panel.querySelector(`[data-uuid="${objectData.mesh.uuid}"][id^="${id}-"]`).value); mesh.position.set(getVal('pos-x'), getVal('pos-y'), getVal('pos-z')); mesh.rotation.set(THREE.MathUtils.degToRad(getVal('rot-x')), THREE.MathUtils.degToRad(getVal('rot-y')), THREE.MathUtils.degToRad(getVal('rot-z'))); const scale = getVal('scale-all'); mesh.scale.set(scale, scale, scale); if (input.type === 'range') { panel.querySelector(`#${input.id.replace(/-range$/, '-num')}`).value = input.value; } if (input.type === 'number') { panel.querySelector(`#${input.id.replace(/-num$/, '-range')}`).value = input.value; } }); }); const attachmentSelect = panel.querySelector('.attachment-select'); if (attachmentSelect) { attachmentSelect.addEventListener('change', (e) => { const boneName = e.target.value; if (boneName === 'scene') scene.attach(mesh); else { const bone = mainCharacter.mesh.getObjectByName(boneName); if (bone) bone.attach(mesh); } }); } };
     const createSlider = (id, label, value, min, max, step, uuid) => { const uniqueId = `${id}-${uuid}`; return `<div class="slider-container"><label>${label}</label><input type="range" id="${uniqueId}-range" data-uuid="${uuid}" min="${min}" max="${max}" step="${step}" value="${value}" style="flex-grow: 1;"><input type="number" id="${uniqueId}-num" data-uuid="${uuid}" value="${value}" step="${step}"></div>`; };
     const setActiveObject = (id) => { activeObjectId = id; document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id)); document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id)); };
     const copyEquipment = () => { if (!activeObjectId || !sceneObjects.has(activeObjectId) || !mainCharacter) { alert("Please load a character and select an asset."); return; } const { mesh } = sceneObjects.get(activeObjectId); if (!mesh.parent || !mesh.parent.isBone) { alert("Asset must be attached to a bone to copy its transform."); return; } const { position: pos, rotation: rot, scale: scl } = mesh; const output = `// Transform for ${mesh.name} attached to ${mesh.parent.name}\n` + `object.position.set(${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)});\n` + `object.rotation.set(${rot.x.toFixed(4)}, ${rot.y.toFixed(4)}, ${rot.z.toFixed(4)}); // Radians\n` + `object.scale.set(${scl.x.toFixed(4)}, ${scl.y.toFixed(4)}, ${scl.z.toFixed(4)});`; navigator.clipboard.writeText(output).then(() => { alert("Code copied to clipboard!"); }).catch(err => { console.error("Failed to copy text: ", err); alert("Failed to copy code."); }); };
-
-    // Helper function to add and track event listeners
-    function addTrackedListener(target, type, handler) {
-        target.addEventListener(type, handler);
-        eventListeners.push({ target, type, handler });
-    }
-
+    
+    // --- EVENT LISTENERS ---
     addTrackedListener(loadBtn, 'click', handleLoadBtnClick);
     addTrackedListener(window, 'click', handleWindowClick);
-
-    const charChangeHandler = (e) => loadGLB(e.target.files, true);
-    const assetChangeHandler = (e) => loadGLB(e.target.files, false);
-    const animChangeHandler = (e) => loadAnimation(e.target.files[0]);
-    
-    addTrackedListener(charInput, 'change', charChangeHandler);
-    addTrackedListener(assetInput, 'change', assetChangeHandler);
-    addTrackedListener(animInput, 'change', animChangeHandler);
+    addTrackedListener(charInput, 'change', (e) => loadGLB(e.target.files, true));
+    addTrackedListener(assetInput, 'change', (e) => loadGLB(e.target.files, false));
+    addTrackedListener(animInput, 'change', (e) => loadAnimation(e.target.files[0]));
     addTrackedListener(copyBtn, 'click', copyEquipment);
+    addTrackedListener(playPauseBtn, 'click', () => { if (!mainCharacter || !mainCharacter.mixer) return; mainCharacter.isPaused = !mainCharacter.isPaused; mainCharacter.mixer.timeScale = mainCharacter.isPaused ? 0 : 1; playPauseBtn.textContent = mainCharacter.isPaused ? 'Play' : 'Pause'; });
+    addTrackedListener(stepFwdBtn, 'click', () => { if (!mainCharacter || !mainCharacter.mixer) return; if (!mainCharacter.isPaused) { mainCharacter.isPaused = true; mainCharacter.mixer.timeScale = 0; playPauseBtn.textContent = 'Play'; } mainCharacter.mixer.update(1/60); });
+    addTrackedListener(stepBackBtn, 'click', () => { if (!mainCharacter || !mainCharacter.mixer) return; if (!mainCharacter.isPaused) { mainCharacter.isPaused = true; mainCharacter.mixer.timeScale = 0; playPauseBtn.textContent = 'Play'; } mainCharacter.mixer.update(-1/60); });
     
-    const playPauseHandler = () => {
-        if (!mainCharacter || !mainCharacter.mixer) return;
-        mainCharacter.isPaused = !mainCharacter.isPaused;
-        mainCharacter.mixer.timeScale = mainCharacter.isPaused ? 0 : 1;
-        playPauseBtn.textContent = mainCharacter.isPaused ? 'Play' : 'Pause';
-    };
-    addTrackedListener(playPauseBtn, 'click', playPauseHandler);
-
-    const step = (amount) => {
-        if (!mainCharacter || !mainCharacter.mixer) return;
-        if (!mainCharacter.isPaused) {
-            mainCharacter.isPaused = true;
-            mainCharacter.mixer.timeScale = 0;
-            playPauseBtn.textContent = 'Play';
-        }
-        mainCharacter.mixer.update(amount);
-    };
-    addTrackedListener(stepFwdBtn, 'click', () => step(1/60));
-    addTrackedListener(stepBackBtn, 'click', () => step(-1/60));
-    
+    // --- ANIMATION LOOP ---
     const animateTool = () => {
         animationFrameId = requestAnimationFrame(animateTool);
         const delta = clock.getDelta();
@@ -157,4 +120,21 @@ export function init(scene, uiContainer, onBackToDashboard) {
         }
     };
     animateTool();
+
+    // --- RETURN THE CLEANUP FUNCTION ---
+    return function cleanup() {
+        console.log("Cleaning up Attachment Rig tool...");
+        cancelAnimationFrame(animationFrameId);
+        
+        eventListeners.forEach(({ target, type, handler }) => {
+            target.removeEventListener(type, handler);
+        });
+        
+        if (floatingButtonsContainer) {
+            floatingButtonsContainer.style.display = 'none';
+        }
+        return "Attachment Rig listeners & animations stopped.";
+    };
 }
+
+// REMOVED: Global cleanup function is gone.
