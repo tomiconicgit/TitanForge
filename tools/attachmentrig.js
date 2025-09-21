@@ -42,6 +42,7 @@ export function init(appContainer, onBackToDashboard) {
         </div>
     `;
 
+    // References to all UI elements within this tool's scope
     const viewerContainer = document.getElementById('viewer-container');
     const uiContainer = document.getElementById('ui-container');
     const dashboardBtn = document.getElementById('dashboard-btn');
@@ -59,8 +60,6 @@ export function init(appContainer, onBackToDashboard) {
     const stepBackBtn = document.querySelector('.step-back-btn');
     const mainModal = document.getElementById('main-modal');
     const modalContent = document.getElementById('modal-content');
-    
-    const gltfLoader = new GLTFLoader();
 
     function init3DViewer() {
         scene = new THREE.Scene();
@@ -112,10 +111,12 @@ export function init(appContainer, onBackToDashboard) {
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
+        mainModal.classList.add('overlay-visible');
     };
 
     const hideModal = () => {
         mainModal.style.display = 'none';
+        mainModal.classList.remove('overlay-visible');
         modalContent.innerHTML = '';
     };
 
@@ -384,6 +385,18 @@ export function init(appContainer, onBackToDashboard) {
     
     init3DViewer();
     animateTool();
+
+    // Event listeners
+    const loadBtn = document.getElementById('load-btn');
+    const loadDropdown = document.getElementById('load-dropdown');
+    const copyBtn = document.getElementById('copy-btn');
+    const charInput = document.getElementById('char-input');
+    const assetInput = document.getElementById('asset-input');
+    const animInput = document.getElementById('anim-input');
+    const playPauseBtn = document.querySelector('.play-pause-btn');
+    const stepFwdBtn = document.querySelector('.step-fwd-btn');
+    const stepBackBtn = document.querySelector('.step-back-btn');
+    const dashboardBtn = document.getElementById('dashboard-btn');
 
     loadBtn.addEventListener('click', () => {
         loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
