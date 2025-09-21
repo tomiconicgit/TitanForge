@@ -1,127 +1,22 @@
 // tools/rigremoval.js
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
-export function init(appContainer, onBackToDashboard) {
-    let scene, camera, renderer, controls;
+export function init(scene, uiContainer, onBackToDashboard) {
     let currentModel = null;
     let objString = null;
     let originalMaterials = new Map();
     let isProcessing = false;
     let exportFileName = 'model_static.glb';
 
-    appContainer.innerHTML = `
-        <style>
-            .btn {
-                display: block; width: 100%; padding: 0.8rem; border: none;
-                border-radius: 12px;
-                font-size: 0.9rem; font-weight: 600;
-                text-align: center; cursor: pointer;
-                background-color: var(--primary-color);
-                color: white;
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
-            }
-            .btn:hover:not(:disabled) {
-                transform: scale(1.02);
-                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
-            }
-            .btn:active:not(:disabled) {
-                transform: scale(0.98);
-                background-color: #0060d0;
-            }
-            .btn.dashboard {
-                background-color: rgba(60, 60, 67, 0.5);
-                color: var(--text-color);
-                position: absolute;
-                top: 1rem;
-                right: 1rem;
-                width: auto;
-                padding: 0.5rem 1rem;
-                z-index: 10;
-            }
-            .btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-                transform: none;
-            }
-            .card {
-                background-color: var(--panel-bg); border-radius: 12px; padding: 1.25rem;
-                box-shadow: 0 4px 12px var(--shadow-color); display: flex; flex-direction: column; gap: 0.75rem;
-            }
-            .modal-bg {
-                position: fixed;
-                z-index: 100;
-                left: 0; top: 0;
-                width: 100%; height: 100%;
-                display: flex;
-                align-items: flex-end;
-                justify-content: center;
-                pointer-events: none; /* Allows interaction with the viewer */
-            }
-            .modal-bg.overlay-visible {
-                background-color: rgba(0,0,0,0.4);
-                pointer-events: auto; /* Re-enables interaction for the modal itself */
-            }
-            .modal-content {
-                background: var(--panel-bg);
-                border-radius: 24px 24px 0 0;
-                padding: 30px;
-                width: 100%;
-                max-width: 400px;
-                text-align: center;
-                box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
-                backdrop-filter: blur(40px);
-                -webkit-backdrop-filter: blur(40px);
-                display: flex;
-                flex-direction: column;
-                gap: 1.5rem;
-                transform: translateY(100%);
-                animation: modal-slide-in 0.3s forwards;
-                color: var(--text-color);
-            }
-            @keyframes modal-slide-in {
-                to { transform: translateY(0); }
-            }
-            .modal-loader {
-                border: 4px solid var(--border-color);
-                border-top: 4px solid var(--primary-color);
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                margin: 0 auto;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            .file-label {
-                display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color);
-                border-radius: 12px; font-size: 0.9rem; font-weight: 500;
-                text-align: center; cursor: pointer;
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                background-color: var(--panel-bg);
-                color: var(--text-color);
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
-            }
-        </style>
-
-        <div id="tool-container" style="display: flex; flex-direction: column; height: 100%;">
-            <div id="viewer-container" style="flex-grow: 1; position: relative; min-height: 200px;">
-                <button id="dashboard-btn" class="btn dashboard">Dashboard</button>
-            </div>
-            <div id="ui-container" style="flex-shrink: 0; height: 40vh; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: var(--ui-bg); border-top: 1px solid var(--border-color); padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; color: var(--text-color);">
-                <div id="export-panel" class="card" style="display: none; padding: 1rem; text-align: center;">
-                    <button id="rename-btn" class="btn" style="width: 100%; margin-bottom: 1rem;">Rename File</button>
-                    <button id="export-glb-btn" class="btn" style="width: 100%;">Export as .glb</button>
-                </div>
+    uiContainer.innerHTML = `
+        <div id="rig-removal-ui-container" style="display: flex; flex-direction: column; height: 100%; justify-content: flex-end;">
+            <div id="export-panel" class="card" style="display: none; padding: 1rem; text-align: center;">
+                <button id="rename-btn" class="btn" style="width: 100%; margin-bottom: 1rem;">Rename File</button>
+                <button id="export-glb-btn" class="btn" style="width: 100%;">Export as .glb</button>
             </div>
         </div>
 
@@ -141,9 +36,6 @@ export function init(appContainer, onBackToDashboard) {
         </div>
     `;
 
-    const viewerContainer = document.getElementById('viewer-container');
-    const uiContainer = document.getElementById('ui-container');
-    const dashboardBtn = document.getElementById('dashboard-btn');
     const exportPanel = document.getElementById('export-panel');
     const exportGlbBtn = document.getElementById('export-glb-btn');
     const renameBtn = document.getElementById('rename-btn');
@@ -154,55 +46,58 @@ export function init(appContainer, onBackToDashboard) {
     const confirmRenameBtn = document.getElementById('confirm-rename-btn');
     const cancelRenameBtn = document.getElementById('cancel-rename-btn');
 
-    function init3DViewer() {
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1c1c1e);
-        scene.fog = new THREE.Fog(0x1c1c1e, 10, 50);
-        camera = new THREE.PerspectiveCamera(50, viewerContainer.clientWidth / viewerContainer.clientHeight, 0.1, 1000);
-        camera.position.set(0, 1.6, 3.5);
-
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1;
-        viewerContainer.appendChild(renderer.domElement);
-        
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
-        dirLight.position.set(3, 10, 10);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-        
-        const floor = new THREE.Mesh( new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x999999, depthWrite: false }) );
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        scene.add(floor);
-
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 1, 0);
-        controls.enableDamping = true;
-        controls.maxPolarAngle = Math.PI / 2;
-        controls.update();
-        
-        const resizeObserver = new ResizeObserver(entries => {
-            const { width, height } = entries[0].contentRect;
-            camera.aspect = width / height; camera.updateProjectionMatrix();
-            renderer.setSize(width, height);
-        });
-        resizeObserver.observe(viewerContainer);
-        
-        animate();
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-    }
-    
-    init3DViewer();
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .modal-bg {
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: var(--panel-bg);
+            border-radius: 24px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transform: scale(0.9);
+            opacity: 0;
+            animation: modal-fade-in 0.3s forwards;
+            color: var(--text-color);
+        }
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .modal-loader {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes modal-fade-in {
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
 
     const gltfLoader = new GLTFLoader();
     const objExporter = new OBJExporter();
@@ -212,24 +107,20 @@ export function init(appContainer, onBackToDashboard) {
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
-        mainModal.classList.add('overlay-visible');
     };
 
     const hideModal = () => {
         mainModal.style.display = 'none';
-        mainModal.classList.remove('overlay-visible');
         modalContent.innerHTML = '';
     };
 
     const showRenameModal = () => {
         filenameInput.value = exportFileName.replace('.glb', '');
         renameModal.style.display = 'flex';
-        renameModal.classList.add('overlay-visible');
     };
 
     const hideRenameModal = () => {
         renameModal.style.display = 'none';
-        renameModal.classList.remove('overlay-visible');
     };
     
     const resetToolState = () => {
@@ -279,11 +170,7 @@ export function init(appContainer, onBackToDashboard) {
         exportPanel.style.display = 'flex';
     };
 
-    dashboardBtn.addEventListener('click', () => {
-        resetToolState();
-        onBackToDashboard();
-    });
-
+    // Event Listeners
     renameBtn.addEventListener('click', showRenameModal);
 
     confirmRenameBtn.addEventListener('click', () => {
@@ -336,12 +223,9 @@ export function init(appContainer, onBackToDashboard) {
             <button class="btn dashboard" id="cancel-load-btn">Dashboard</button>
         `);
     
-        const modal = document.getElementById('main-modal');
         const modelInput = document.getElementById('rig-model-input');
         const cancelLoadBtn = document.getElementById('cancel-load-btn');
         
-        modal.classList.add('overlay-visible');
-
         modelInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
@@ -352,7 +236,7 @@ export function init(appContainer, onBackToDashboard) {
         });
     
         cancelLoadBtn.addEventListener('click', () => {
-            resetToolState();
+            hideModal();
             onBackToDashboard();
         });
     };
