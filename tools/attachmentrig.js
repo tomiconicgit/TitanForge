@@ -35,6 +35,8 @@ export function cleanup() {
     if (floatingButtonsContainer) {
         floatingButtonsContainer.style.display = 'none';
     }
+    // NEW PART ADDED FOR DEBUGGER
+    return "Attachment Rig listeners & animations stopped.";
 }
 
 export function init(scene, uiContainer, onBackToDashboard) {
@@ -96,7 +98,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     const gltfLoader = new GLTFLoader();
 
-    // ... (All your existing functions like showModal, resetScene, loadGLB, etc. go here unchanged)
     const showModal = (contentHTML) => { modalContent.innerHTML = contentHTML; mainModal.style.display = 'flex'; };
     const hideModal = () => { mainModal.style.display = 'none'; modalContent.innerHTML = ''; };
     const resetScene = () => { sceneObjects.forEach(data => scene.remove(data.mesh)); sceneObjects.clear(); mainCharacter = null; tabContainer.innerHTML = ''; controlPanelsContainer.innerHTML = ''; animControlsContainer.style.display = 'none'; activeObjectId = null; };
