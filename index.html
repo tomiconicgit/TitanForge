@@ -20,6 +20,7 @@
     }">
     <style>
         :root {
+            /* Dark Mode Variables */
             --viewer-bg: #1c1c1e;
             --ui-bg: rgba(28, 28, 30, 0.7);
             --panel-bg: rgba(44, 44, 46, 0.8);
@@ -41,12 +42,26 @@
             color: var(--text-color);
         }
         #app-container {
+            flex-grow: 1; display: flex; flex-direction: column; position: relative;
+        }
+        #viewer-container {
             flex-grow: 1;
             position: relative;
+            min-height: 200px;
+        }
+        #ui-container {
+            flex-shrink: 0;
+            height: 40vh;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            background: var(--ui-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            width: 100%;
-            height: 100%;
+            gap: 1rem;
+            color: var(--text-color);
         }
         #loading-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -89,6 +104,30 @@
             transform: scale(0.98);
             background-color: #0060d0;
         }
+        .btn.dashboard {
+            background-color: rgba(60, 60, 67, 0.5);
+            color: var(--text-color);
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: auto;
+            padding: 0.5rem 1rem;
+            display: none;
+            z-index: 10;
+        }
+        #floating-buttons-container {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 10;
+            display: none;
+            flex-direction: row; /* Buttons now horizontal */
+            gap: 0.5rem;
+        }
+        #floating-buttons-container .btn {
+            width: auto;
+            padding: 0.5rem 1rem;
+        }
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -122,6 +161,12 @@
             transform: none;
             box-shadow: none;
         }
+        .status-log {
+            font-size: 0.85rem; text-align: center; color: var(--secondary-text-color); padding: 0.5rem;
+            background-color: var(--panel-bg); border-radius: 6px; margin-top: auto; transition: all 0.3s ease;
+        }
+        .status-log.error { background-color: #ff453a; color: white; }
+
         .fade-in {
             animation: fade-in 1s forwards;
             opacity: 0;
@@ -138,53 +183,6 @@
             from { opacity: 1; }
             to { opacity: 0; }
         }
-        .modal-bg {
-            position: fixed;
-            z-index: 100;
-            left: 0; top: 0;
-            width: 100%; height: 100%;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            pointer-events: none;
-        }
-        .modal-bg.overlay-visible {
-            background-color: rgba(0,0,0,0.4);
-            pointer-events: auto;
-        }
-        .modal-content {
-            background: var(--panel-bg);
-            border-radius: 24px 24px 0 0;
-            padding: 30px;
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
-            backdrop-filter: blur(40px);
-            -webkit-backdrop-filter: blur(40px);
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            transform: translateY(100%);
-            animation: modal-slide-in 0.3s forwards;
-            color: var(--text-color);
-        }
-        @keyframes modal-slide-in {
-            to { transform: translateY(0); }
-        }
-        .modal-loader {
-            border: 4px solid var(--border-color);
-            border-top: 4px solid var(--primary-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -197,7 +195,23 @@
             <div id="loading-text">Starting up...</div>
             <div id="process-log"></div>
         </div>
+        <button id="dashboard-btn" class="btn dashboard">Dashboard</button>
+        <div id="floating-buttons-container">
+            <button id="load-btn" class="btn">Load</button>
+            <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; width: 100%;">
+                <label for="char-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Model</label>
+                <input type="file" id="char-input" accept=".glb" hidden>
+                <label for="asset-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Asset</label>
+                <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
+                <label for="anim-input" class="btn file-label" style="width: auto;">Animation</label>
+                <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+            </div>
+            <button id="copy-btn" class="btn">Copy</button>
+        </div>
+        <div id="viewer-container"></div>
+        <div id="ui-container"></div>
     </div>
+    
     <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
     <script src="loading.js" type="module"></script>
 </body>
