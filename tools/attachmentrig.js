@@ -46,8 +46,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
             .control-group h3 { margin: 0 0 10px; font-size: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
             .slider-container { display: grid; grid-template-columns: 20px 1fr 50px; align-items: center; gap: 10px; margin-bottom: 5px; }
             .attachment-select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--panel-bg); color: var(--text-color); }
-            
-            /* NEW: Styles for toggle switches */
             .toggle-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
             .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
             .switch input { opacity: 0; width: 0; height: 0; }
@@ -57,7 +55,6 @@ export function init(scene, uiContainer, onBackToDashboard) {
             input:checked + .slider:before { transform: translateX(20px); }
             .slider.round { border-radius: 24px; }
             .slider.round:before { border-radius: 50%; }
-
             .modal-bg { position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; }
             .modal-content { background: var(--panel-bg); border-radius: 24px; padding: 30px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px); display: flex; flex-direction: column; gap: 1.5rem; transform: scale(0.9); opacity: 0; animation: modal-fade-in 0.3s forwards; color: var(--text-color); }
             @keyframes modal-fade-in { to { transform: scale(1); opacity: 1; } }
@@ -85,12 +82,11 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     const gltfLoader = new GLTFLoader();
 
-    function normalizeAndCenterModel(model) { /* ... function is unchanged ... */ }
-    const showModal = (contentHTML) => { /* ... function is unchanged ... */ };
-    const hideModal = () => { /* ... function is unchanged ... */ };
-    const resetScene = () => { /* ... function is unchanged ... */ };
+    function normalizeAndCenterModel(model) { /* ... */ }
+    const showModal = (contentHTML) => { /* ... */ };
+    const hideModal = () => { /* ... */ };
+    const resetScene = () => { /* ... */ };
     
-    // MODIFIED: loadObject now finds and stores all sub-meshes for the character
     const loadObject = (files, type) => {
         if (!files || files.length === 0) return;
         if (type !== 'character' && !mainCharacter) {
@@ -104,36 +100,18 @@ export function init(scene, uiContainer, onBackToDashboard) {
             reader.onload = (e) => {
                 gltfLoader.parse(e.target.result, '', (gltf) => {
                     if (type === 'character') resetScene();
-                    
                     const model = gltf.scene;
                     model.name = file.name.replace(/\.[^/.]+$/, "");
 
-                    if (type === 'character') {
-                        normalizeAndCenterModel(model);
-                    }
+                    if (type === 'character') normalizeAndCenterModel(model);
                     
                     model.traverse(node => { if (node.isMesh) node.castShadow = true; });
                     
-                    const objectData = {
-                        mesh: model,
-                        bones: [],
-                        mixer: null,
-                        activeAction: null,
-                        isPaused: true,
-                        type: type,
-                        // NEW: Store sub-meshes for characters
-                        subMeshes: []
-                    };
-                    
+                    const objectData = { mesh: model, bones: [], mixer: null, type: type, subMeshes: [] };
                     model.traverse(node => { if (node.isBone) objectData.bones.push(node.name); });
                     
-                    // NEW: If it's a character, find all its visible parts
                     if (type === 'character') {
-                        model.traverse(node => {
-                            if (node.isMesh || node.isSkinnedMesh) {
-                                objectData.subMeshes.push(node);
-                            }
-                        });
+                        model.traverse(node => { if (node.isMesh || node.isSkinnedMesh) objectData.subMeshes.push(node); });
                     }
                     
                     sceneObjects.set(model.uuid, objectData);
@@ -149,148 +127,102 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
-    const loadAnimation = (file) => { /* ... function is unchanged ... */ };
+    const loadAnimation = (file) => { /* ... */ };
     
-    const createUIForObject = (objectData) => { /* ... function is unchanged ... */ };
+    const createUIForObject = (objectData) => {
+        const tab = document.createElement('button');
+        tab.className = 'tab-btn';
+        tab.textContent = objectData.mesh.name;
+        tab.dataset.id = objectData.mesh.uuid;
+        tab.onclick = () => setActiveObject(objectData.mesh.uuid);
+        tabContainer.appendChild(tab);
+        const panel = document.createElement('div');
+        panel.className = 'panel';
+        panel.dataset.id = objectData.mesh.uuid;
+        controlPanelsContainer.appendChild(panel);
+        renderPanelContent(objectData);
+    };
 
-    // --- START: MODIFIED RENDERPANELCONTENT FUNCTION ---
     const renderPanelContent = (objectData) => {
         const { mesh, type } = objectData;
         const panel = document.querySelector(`.panel[data-id="${mesh.uuid}"]`);
         if (!panel) return;
-        
         let panelHTML = '';
 
         if (type === 'character') {
-            // UI for the main character: list of sub-meshes with toggles
             panelHTML += `<div class="control-group"><h3>Body Parts</h3>`;
             if (objectData.subMeshes.length > 0) {
-                objectData.subMeshes.forEach(subMesh => {
-                    panelHTML += createToggle(subMesh.uuid, subMesh.name, subMesh.visible);
-                });
-            } else {
-                panelHTML += `<p>No individual meshes found.</p>`;
-            }
+                objectData.subMeshes.forEach(subMesh => { panelHTML += createToggle(subMesh.uuid, subMesh.name, subMesh.visible); });
+            } else { panelHTML += `<p>No individual meshes found.</p>`; }
             panelHTML += `</div>`;
         } else {
-            // UI for assets and clothing: sliders and a single visibility toggle
-            panelHTML += `<div class="control-group">
-                <h3>Position, Rotation, Scale</h3>
-                ${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}
-                ${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}
-                ${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}
-                ${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}
-                ${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}
-                ${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}
-                ${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}
-            </div>`;
-
+            panelHTML += `<div class="control-group"><h3>Position, Rotation, Scale</h3>${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}</div>`;
             if (mainCharacter) {
                 const boneOptions = mainCharacter.bones.map(name => `<option value="${name}">${name}</option>`).join('');
-                panelHTML += `<div class="control-group"><h3>Attachment</h3>
-                    <select class="attachment-select" data-id="${mesh.uuid}">
-                        <option value="scene">-- Detach (World) --</option>
-                        ${boneOptions}
-                    </select></div>`;
+                panelHTML += `<div class="control-group"><h3>Attachment</h3><select class="attachment-select" data-id="${mesh.uuid}"><option value="scene">-- Detach (World) --</option>${boneOptions}</select></div>`;
             }
-
             panelHTML += `<div class="control-group"><h3>Visibility</h3>${createToggle(mesh.uuid, 'Visible', mesh.visible)}</div>`;
         }
-
         panel.innerHTML = panelHTML;
         addEventListenersToPanel(panel, objectData);
     };
-    // --- END: MODIFIED RENDERPANELCONTENT FUNCTION ---
-
-    // NEW: Helper function to create HTML for a toggle switch
-    const createToggle = (uuid, label, isVisible) => {
-        return `
-            <div class="toggle-container">
-                <label for="toggle-${uuid}">${label}</label>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-${uuid}" data-mesh-uuid="${uuid}" ${isVisible ? 'checked' : ''}>
-                    <span class="slider round"></span>
-                </label>
-            </div>
-        `;
-    };
     
-    // MODIFIED: addEventListenersToPanel now handles the new toggles
+    const createToggle = (uuid, label, isVisible) => { /* ... */ };
+    
     const addEventListenersToPanel = (panel, objectData) => {
         const { mesh, type } = objectData;
-        
-        // Slider logic (unchanged)
-        panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(input => {
-            input.addEventListener('input', () => {
-                const getVal = (id) => parseFloat(panel.querySelector(`[data-uuid="${mesh.uuid}"][id^="${id}-"]`).value);
-                mesh.position.set(getVal('pos-x'), getVal('pos-y'), getVal('pos-z'));
-                mesh.rotation.set(
-                    THREE.MathUtils.degToRad(getVal('rot-x')),
-                    THREE.MathUtils.degToRad(getVal('rot-y')),
-                    THREE.MathUtils.degToRad(getVal('rot-z'))
-                );
-                const scale = getVal('scale-all');
-                mesh.scale.set(scale, scale, scale);
-                if (input.type === 'range') { panel.querySelector(`#${input.id.replace(/-range$/, '-num')}`).value = input.value; }
-                if (input.type === 'number') { panel.querySelector(`#${input.id.replace(/-num$/, '-range')}`).value = input.value; }
-            });
-        });
-
-        // Attachment select logic (unchanged)
+        panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(input => { /* ... */ });
         const attachmentSelect = panel.querySelector('.attachment-select');
-        if (attachmentSelect) {
-            attachmentSelect.addEventListener('change', (e) => {
-                const boneName = e.target.value;
-                if (boneName === 'scene') { scene.attach(mesh); } 
-                else { const bone = mainCharacter.mesh.getObjectByName(boneName); if (bone) bone.attach(mesh); }
-            });
-        }
-
-        // NEW: Toggle switch logic
+        if (attachmentSelect) { /* ... */ }
         panel.querySelectorAll('input[type="checkbox"][data-mesh-uuid]').forEach(toggle => {
             toggle.addEventListener('change', (e) => {
                 const meshUuid = e.target.dataset.meshUuid;
-                let meshToToggle;
-
-                if (type === 'character') {
-                    // Find the sub-mesh within the character
-                    meshToToggle = objectData.subMeshes.find(m => m.uuid === meshUuid);
-                } else {
-                    // It's the main mesh of an asset or clothing item
-                    meshToToggle = mesh;
-                }
-
-                if (meshToToggle) {
-                    meshToToggle.visible = e.target.checked;
-                }
+                let meshToToggle = (type === 'character') ? objectData.subMeshes.find(m => m.uuid === meshUuid) : mesh;
+                if (meshToToggle) meshToToggle.visible = e.target.checked;
             });
         });
     };
     
-    const createSlider = (id, label, value, min, max, step, uuid) => { /* ... function is unchanged ... */ };
-    const setActiveObject = (id) => { /* ... function is unchanged ... */ };
-    const copyAssetInfo = () => { /* ... function is unchanged ... */ };
-    const copyClothingInfo = () => { /* ... function is unchanged ... */ };
+    const createSlider = (id, label, value, min, max, step, uuid) => { /* ... */ };
+    const setActiveObject = (id) => { /* ... */ };
+    const copyAssetInfo = () => { /* ... */ };
+    const copyClothingInfo = () => { /* ... */ };
     
-    // --- EVENT LISTENERS (UNCHANGED) ---
-    const handleDropdown = (btn, dropdown) => (event) => { /* ... */ };
+    // --- START: MODIFIED EVENT LISTENER SECTION ---
+
+    // THIS FUNCTION WAS MISSING. IT IS NOW RESTORED.
+    const handleDropdown = (btn, dropdown) => (event) => {
+        event.stopPropagation();
+        const isHidden = dropdown.style.display === 'none';
+        // Hide all dropdowns first to ensure only one is open
+        document.getElementById('load-dropdown').style.display = 'none';
+        document.getElementById('copy-dropdown').style.display = 'none';
+        // Then show the target one if it was hidden
+        if (isHidden) dropdown.style.display = 'block';
+    };
+
     addTrackedListener(loadBtn, 'click', handleDropdown(loadBtn, loadDropdown));
     addTrackedListener(copyBtn, 'click', handleDropdown(copyBtn, copyDropdown));
-    addTrackedListener(window, 'click', () => { /* ... */ });
+    addTrackedListener(window, 'click', () => {
+        loadDropdown.style.display = 'none';
+        copyDropdown.style.display = 'none';
+    });
+    
     addTrackedListener(charInput, 'change', (e) => loadObject(e.target.files, 'character'));
     addTrackedListener(assetInput, 'change', (e) => loadObject(e.target.files, 'asset'));
     addTrackedListener(clothingInput, 'change', (e) => loadObject(e.target.files, 'clothing'));
     addTrackedListener(animInput, 'change', (e) => loadAnimation(e.target.files[0]));
+    
     addTrackedListener(copyAssetBtn, 'click', copyAssetInfo);
     addTrackedListener(copyClothingBtn, 'click', copyClothingInfo);
+    
     addTrackedListener(playPauseBtn, 'click', () => { /* ... */ });
     addTrackedListener(stepFwdBtn, 'click', () => { /* ... */ });
     addTrackedListener(stepBackBtn, 'click', () => { /* ... */ });
+    // --- END: MODIFIED EVENT LISTENER SECTION ---
     
-    // --- ANIMATION LOOP (UNCHANGED) ---
     const animateTool = () => { /* ... */ };
     animateTool();
 
-    // --- RETURN CLEANUP FUNCTION (UNCHANGED) ---
     return function cleanup() { /* ... */ };
 }
