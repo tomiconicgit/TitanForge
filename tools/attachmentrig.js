@@ -1,151 +1,57 @@
 // tools/attachmentrig.js
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
-export function init(scene, uiContainer, onBackToDashboard) {
-    const clock = new THREE.Clock();
+export function init(appContainer, onBackToDashboard) {
+    let scene, camera, renderer, controls;
     let mainCharacter = null;
     const sceneObjects = new Map();
     let activeObjectId = null;
+    let clock = new THREE.Clock();
 
-    const floatingButtonsContainer = document.getElementById('floating-buttons-container');
+    appContainer.innerHTML = `
+        <div id="tool-container" style="display: flex; flex-direction: column; height: 100%;">
+            <div id="viewer-container" style="flex-grow: 1; position: relative; min-height: 200px;">
+                <div id="floating-buttons-container" style="position: absolute; top: 1rem; left: 1rem; z-index: 10; display: flex; flex-direction: row; gap: 0.5rem;">
+                    <button id="load-btn" class="btn">Load</button>
+                    <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; width: 100%;">
+                        <label for="char-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Model</label>
+                        <input type="file" id="char-input" accept=".glb" hidden>
+                        <label for="asset-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Asset</label>
+                        <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
+                        <label for="anim-input" class="btn file-label" style="width: auto;">Animation</label>
+                        <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+                    </div>
+                    <button id="copy-btn" class="btn">Copy</button>
+                </div>
+                <button id="dashboard-btn" class="btn dashboard" style="position: absolute; top: 1rem; right: 1rem; z-index: 10;">Dashboard</button>
+            </div>
+            <div id="ui-container" style="flex-shrink: 0; height: 40vh; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: var(--ui-bg); border-top: 1px solid var(--border-color); padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; color: var(--text-color);">
+                <div id="tab-container" style="display: flex; overflow-x: auto; padding: 10px 0; border-bottom: 1px solid var(--border-color); min-height: 50px;"></div>
+                <div id="control-panels-container" style="flex-grow: 1; overflow-y: auto; padding-top: 15px;"></div>
+                <div class="anim-controls-container" style="display: none; justify-content: space-around; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 1rem;">
+                    <button class="btn secondary step-back-btn" style="flex: 1;">&lt;&lt;</button>
+                    <button class="btn secondary play-pause-btn" style="flex: 2;">Pause</button>
+                    <button class="btn secondary step-fwd-btn" style="flex: 1;">&gt;&gt;</button>
+                </div>
+            </div>
+        </div>
+        <div id="main-modal" style="display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;">
+            <div class="modal-content" id="modal-content"></div>
+        </div>
+    `;
+
+    // References to all UI elements
+    const viewerContainer = document.getElementById('viewer-container');
+    const uiContainer = document.getElementById('ui-container');
+    const dashboardBtn = document.getElementById('dashboard-btn');
     const loadBtn = document.getElementById('load-btn');
     const loadDropdown = document.getElementById('load-dropdown');
     const copyBtn = document.getElementById('copy-btn');
     const charInput = document.getElementById('char-input');
     const assetInput = document.getElementById('asset-input');
     const animInput = document.getElementById('anim-input');
-    
-    floatingButtonsContainer.style.display = 'flex';
-    
-    uiContainer.innerHTML = `
-        <style>
-            #attachment-rig-ui {
-                display: flex;
-                flex-direction: column;
-                height: 100%;
-                color: var(--text-color);
-                position: relative;
-            }
-            #tab-container {
-                display: flex;
-                overflow-x: auto;
-                padding: 10px 0;
-                border-bottom: 1px solid var(--border-color);
-                min-height: 50px;
-            }
-            .tab-btn {
-                background: transparent;
-                border: none;
-                padding: 10px 16px;
-                cursor: pointer;
-                color: var(--secondary-text-color);
-                font-weight: bold;
-                flex-shrink: 0;
-                transition: color 0.2s ease, border-bottom-color 0.2s ease;
-                border-bottom: 2px solid transparent;
-                font-size: 0.9rem;
-            }
-            .tab-btn.active {
-                color: var(--primary-color);
-                border-bottom-color: var(--primary-color);
-            }
-            #control-panels-container {
-                flex-grow: 1;
-                overflow-y: auto;
-                padding-top: 15px;
-            }
-            .panel {
-                display: none;
-            }
-            .panel.active {
-                display: block;
-            }
-            .control-group {
-                margin-bottom: 15px;
-            }
-            .control-group h3 {
-                margin: 0 0 10px;
-                font-size: 16px;
-                border-bottom: 1px solid var(--border-color);
-                padding-bottom: 5px;
-            }
-            .slider-container {
-                display: grid;
-                grid-template-columns: 20px 1fr 50px;
-                align-items: center;
-                gap: 10px;
-                margin-bottom: 5px;
-            }
-            .attachment-select {
-                width: 100%;
-                padding: 8px;
-                border-radius: 8px;
-                border: 1px solid var(--border-color);
-                background-color: var(--panel-bg);
-                color: var(--text-color);
-            }
-            .modal-bg {
-                position: fixed;
-                z-index: 100;
-                left: 0; top: 0;
-                width: 100%; height: 100%;
-                background-color: rgba(0,0,0,0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .modal-content {
-                background: var(--panel-bg);
-                border-radius: 24px;
-                padding: 30px;
-                width: 90%;
-                max-width: 400px;
-                text-align: center;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                backdrop-filter: blur(40px);
-                -webkit-backdrop-filter: blur(40px);
-                display: flex;
-                flex-direction: column;
-                gap: 1.5rem;
-                transform: scale(0.9);
-                opacity: 0;
-                animation: modal-fade-in 0.3s forwards;
-                color: var(--text-color);
-            }
-            @keyframes modal-fade-in {
-                to { transform: scale(1); opacity: 1; }
-            }
-            .modal-loader {
-                border: 4px solid var(--border-color);
-                border-top: 4px solid var(--primary-color);
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                margin: 0 auto;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        </style>
-        <div id="attachment-rig-ui">
-            <div id="tab-container"></div>
-            <div id="control-panels-container"></div>
-            <div class="anim-controls-container" style="display: none; justify-content: space-around; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 1rem;">
-                <button class="btn secondary step-back-btn" style="flex: 1;">&lt;&lt;</button>
-                <button class="btn secondary play-pause-btn" style="flex: 2;">Pause</button>
-                <button class="btn secondary step-fwd-btn" style="flex: 1;">&gt;&gt;</button>
-            </div>
-        </div>
-
-        <div id="main-modal" class="modal-bg" style="display: none;">
-            <div class="modal-content" id="modal-content"></div>
-        </div>
-    `;
-
     const tabContainer = document.getElementById('tab-container');
     const controlPanelsContainer = document.getElementById('control-panels-container');
     const animControlsContainer = document.querySelector('.anim-controls-container');
@@ -154,34 +60,57 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const stepBackBtn = document.querySelector('.step-back-btn');
     const mainModal = document.getElementById('main-modal');
     const modalContent = document.getElementById('modal-content');
-    
+
     const gltfLoader = new GLTFLoader();
 
-    // Event listeners for the global floating buttons
-    const loadBtn = document.getElementById('load-btn');
-    const loadDropdown = document.getElementById('load-dropdown');
-    const copyBtn = document.getElementById('copy-btn');
-    const charInput = document.getElementById('char-input');
-    const assetInput = document.getElementById('asset-input');
-    const animInput = document.getElementById('anim-input');
-    
-    loadBtn.addEventListener('click', () => {
-        loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
-    });
-    copyBtn.addEventListener('click', copyEquipment);
-    charInput.addEventListener('change', (e) => {
-        loadDropdown.style.display = 'none';
-        loadGLB(e.target.files, true);
-    });
-    assetInput.addEventListener('change', (e) => {
-        loadDropdown.style.display = 'none';
-        loadGLB(e.target.files, false);
-    });
-    animInput.addEventListener('change', (e) => {
-        loadDropdown.style.display = 'none';
-        loadAnimation(e.target.files[0]);
-    });
-    
+    function init3DViewer() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1c1c1e);
+        scene.fog = new THREE.Fog(0x1c1c1e, 10, 50);
+        camera = new THREE.PerspectiveCamera(50, viewerContainer.clientWidth / viewerContainer.clientHeight, 0.1, 1000);
+        camera.position.set(0, 1.6, 3.5);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1;
+        viewerContainer.appendChild(renderer.domElement);
+        
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+        dirLight.position.set(3, 10, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
+        const floor = new THREE.Mesh( new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x999999, depthWrite: false }) );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 1, 0);
+        controls.enableDamping = true;
+        controls.maxPolarAngle = Math.PI / 2;
+        controls.update();
+        
+        const resizeObserver = new ResizeObserver(entries => {
+            const { width, height } = entries[0].contentRect;
+            camera.aspect = width / height; camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        });
+        resizeObserver.observe(viewerContainer);
+        
+        animate();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
@@ -436,7 +365,31 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
-    // Event Listeners
+    const animateTool = () => {
+        requestAnimationFrame(animateTool);
+        const delta = clock.getDelta();
+        if (mainCharacter && mainCharacter.mixer && !mainCharacter.isPaused) {
+            mainCharacter.mixer.update(delta);
+        }
+    };
+    
+    // Event listeners
+    loadBtn.addEventListener('click', () => {
+        loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
+    });
+    copyBtn.addEventListener('click', copyEquipment);
+    charInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadGLB(e.target.files, true);
+    });
+    assetInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadGLB(e.target.files, false);
+    });
+    animInput.addEventListener('change', (e) => {
+        loadDropdown.style.display = 'none';
+        loadAnimation(e.target.files[0]);
+    });
     playPauseBtn.addEventListener('click', () => {
         if (!mainCharacter || !mainCharacter.mixer) return;
         mainCharacter.isPaused = !mainCharacter.isPaused;
@@ -454,14 +407,11 @@ export function init(scene, uiContainer, onBackToDashboard) {
     };
     stepFwdBtn.addEventListener('click', () => step(1/60));
     stepBackBtn.addEventListener('click', () => step(-1/60));
-    
-    // Animation loop for the attachment rig tool
-    const animateTool = () => {
-        requestAnimationFrame(animateTool);
-        const delta = clock.getDelta();
-        if (mainCharacter && mainCharacter.mixer && !mainCharacter.isPaused) {
-            mainCharacter.mixer.update(delta);
-        }
-    };
+    dashboardBtn.addEventListener('click', () => {
+        resetScene();
+        onBackToDashboard();
+    });
+
+    init3DViewer();
     animateTool();
 }
