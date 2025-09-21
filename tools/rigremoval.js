@@ -128,7 +128,6 @@ export function init(appContainer, onBackToDashboard) {
         </div>
     `;
 
-    // References to all UI elements within this tool's scope
     const viewerContainer = document.getElementById('viewer-container');
     const uiContainer = document.getElementById('ui-container');
     const dashboardBtn = document.getElementById('dashboard-btn');
@@ -142,13 +141,13 @@ export function init(appContainer, onBackToDashboard) {
     const confirmRenameBtn = document.getElementById('confirm-rename-btn');
     const cancelRenameBtn = document.getElementById('cancel-rename-btn');
 
-    // Tool-specific 3D viewer setup
     function init3DViewer() {
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1c1c1e);
         scene.fog = new THREE.Fog(0x1c1c1e, 10, 50);
         camera = new THREE.PerspectiveCamera(50, viewerContainer.clientWidth / viewerContainer.clientHeight, 0.1, 1000);
         camera.position.set(0, 1.6, 3.5);
+
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
@@ -156,34 +155,40 @@ export function init(appContainer, onBackToDashboard) {
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1;
         viewerContainer.appendChild(renderer.domElement);
+        
         scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2));
         const dirLight = new THREE.DirectionalLight(0xffffff, 2);
         dirLight.position.set(3, 10, 10);
         dirLight.castShadow = true;
         scene.add(dirLight);
+        
         const floor = new THREE.Mesh( new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x999999, depthWrite: false }) );
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
         scene.add(floor);
+
         controls = new OrbitControls(camera, renderer.domElement);
         controls.target.set(0, 1, 0);
         controls.enableDamping = true;
         controls.maxPolarAngle = Math.PI / 2;
         controls.update();
+        
         const resizeObserver = new ResizeObserver(entries => {
             const { width, height } = entries[0].contentRect;
             camera.aspect = width / height; camera.updateProjectionMatrix();
             renderer.setSize(width, height);
         });
         resizeObserver.observe(viewerContainer);
+        
         animate();
     }
-    
+
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
         renderer.render(scene, camera);
     }
+    
     init3DViewer();
 
     const gltfLoader = new GLTFLoader();
@@ -257,7 +262,6 @@ export function init(appContainer, onBackToDashboard) {
         exportPanel.style.display = 'flex';
     };
 
-    // Event Listeners
     dashboardBtn.addEventListener('click', () => {
         resetToolState();
         onBackToDashboard();
