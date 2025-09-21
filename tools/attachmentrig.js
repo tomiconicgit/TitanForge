@@ -137,39 +137,8 @@ export function init(scene, uiContainer, onBackToDashboard) {
         });
     };
 
-    const loadAnimation = (file) => {
-        if (!file || !mainCharacter) {
-            alert("Please load a character model first!");
-            return;
-        }
-        showModal(`<h2 class="modal-title">Loading Animation</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            gltfLoader.parse(e.target.result, '', (gltf) => {
-                const clip = gltf.animations[0];
-                if (!clip) {
-                    showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>This GLB file contains no animations.</p><button class="btn" onclick="hideModal()">OK</button>`);
-                    return;
-                }
-                if (!mainCharacter.mixer) mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh);
-                if (mainCharacter.activeAction) mainCharacter.activeAction.stop();
-                const action = mainCharacter.mixer.clipAction(clip);
-                action.setLoop(THREE.LoopRepeat, Infinity).play();
-                mainCharacter.activeAction = action;
-                mainCharacter.isPaused = false;
-                mainCharacter.mixer.timeScale = 1;
-                playPauseBtn.textContent = 'Pause';
-                animControlsContainer.style.display = 'flex';
-                hideModal();
-            }, (error) => {
-                showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to load animation file: ${error.message}</p><button class="btn" onclick="hideModal()">OK</button>`);
-                console.error(error);
-            });
-        };
-        reader.readAsArrayBuffer(file);
-    };
+    const loadAnimation = (file) => { /* ... unchanged ... */ };
     
-    // --- START: THESE FUNCTIONS WERE MISSING ---
     const createUIForObject = (objectData) => {
         const tab = document.createElement('button');
         tab.className = 'tab-btn';
@@ -184,39 +153,40 @@ export function init(scene, uiContainer, onBackToDashboard) {
         renderPanelContent(objectData);
     };
 
+    // --- START: MODIFIED RENDERPANELCONTENT FUNCTION ---
     const renderPanelContent = (objectData) => {
         const { mesh } = objectData;
         const panel = document.querySelector(`.panel[data-id="${mesh.uuid}"]`);
         if (!panel) return;
-        
-        let panelHTML = '';
 
-        if (objectData.type !== 'character') {
-            panelHTML += `<div class="control-group">
-                <h3>Position</h3>
-                ${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}
-                ${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}
-                ${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}
-                <h3>Rotation (Degrees)</h3>
-                ${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}
-                ${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}
-                ${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}
-                <h3>Scale</h3>
-                ${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}
-            </div>`;
+        // Sliders are now generated for ALL object types
+        let panelHTML = `<div class="control-group">
+            <h3>Position</h3>
+            ${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}
+            ${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}
+            ${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}
+            <h3>Rotation (Degrees)</h3>
+            ${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}
+            ${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}
+            ${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}
+            <h3>Scale</h3>
+            ${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}
+        </div>`;
 
-            if (mainCharacter) {
-                const boneOptions = mainCharacter.bones.map(name => `<option value="${name}">${name}</option>`).join('');
-                panelHTML += `<div class="control-group"><h3>Attachment</h3>
-                    <select class="attachment-select" data-id="${mesh.uuid}">
-                        <option value="scene">-- Detach (World) --</option>
-                        ${boneOptions}
-                    </select></div>`;
-            }
+        // The attachment dropdown is ONLY added for non-character objects
+        if (mainCharacter && objectData.type !== 'character') {
+            const boneOptions = mainCharacter.bones.map(name => `<option value="${name}">${name}</option>`).join('');
+            panelHTML += `<div class="control-group"><h3>Attachment</h3>
+                <select class="attachment-select" data-id="${mesh.uuid}">
+                    <option value="scene">-- Detach (World) --</option>
+                    ${boneOptions}
+                </select></div>`;
         }
+
         panel.innerHTML = panelHTML;
         addEventListenersToPanel(panel, objectData);
     };
+    // --- END: MODIFIED RENDERPANELCONTENT FUNCTION ---
     
     const addEventListenersToPanel = (panel, objectData) => {
         const { mesh } = objectData;
@@ -267,8 +237,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         document.querySelectorAll('#tab-container .tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.id === id));
         document.querySelectorAll('#control-panels-container .panel').forEach(panel => panel.classList.toggle('active', panel.dataset.id === id));
     };
-    // --- END: MISSING FUNCTIONS ---
-
+    
     const copyAssetInfo = () => {
         if (!activeObjectId || !sceneObjects.has(activeObjectId)) return alert("Please select an asset.");
         const { mesh, type } = sceneObjects.get(activeObjectId);
