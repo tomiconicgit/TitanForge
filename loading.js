@@ -18,15 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const assetsToLoad = ['main.js'];
     const totalAssets = assetsToLoad.length;
     
-    // Simulate loading for better visual feedback
     const loadingInterval = setInterval(() => {
-        progress += 5; // Slower progress
+        progress += 5;
         loadingProgress.style.width = `${progress}%`;
         if (progress >= 100) {
             clearInterval(loadingInterval);
             loadingText.textContent = "All core assets loaded. Initializing...";
             
-            // Now load the main script
             import('./main.js')
                 .then(() => {
                     logProcess("Main application initialized.");
@@ -37,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             loadingScreen.style.display = 'none';
                             loadingScreen.style.pointerEvents = 'none';
                         }, { once: true });
-                    }, 1000); // Wait 1 second before fading out
+                    }, 1000);
                 })
                 .catch(err => {
                     logProcess(`Fatal error: ${err.message}`, 'error');
@@ -45,5 +43,5 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error(err);
                 });
         }
-    }, 150); // Adjust interval for speed
+    }, 150);
 });
