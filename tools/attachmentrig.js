@@ -2,8 +2,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// REMOVED: Global state variables like eventListeners and animationFrameId are gone.
-
 export function init(scene, uiContainer, onBackToDashboard) {
     // STATE IS NOW LOCAL: All state is contained within the init function.
     let animationFrameId;
@@ -86,12 +84,57 @@ export function init(scene, uiContainer, onBackToDashboard) {
     
     const gltfLoader = new GLTFLoader();
 
-    // --- LOGIC FUNCTIONS (UNCHANGED) ---
+    // NEW/IMPROVED: Replaces the old centerAndOrientModel function
+    function normalizeAndCenterModel(model) {
+        model.rotation.set(-Math.PI / 2, 0, Math.PI);
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const targetHeight = 1.75;
+        if (size.y > 0) {
+            const scaleFactor = targetHeight / size.y;
+            model.scale.setScalar(scaleFactor);
+        }
+        const scaledBox = new THREE.Box3().setFromObject(model);
+        model.position.y = -scaledBox.min.y;
+    }
+
     const showModal = (contentHTML) => { const modal = document.getElementById('main-modal'); modal.querySelector('#modal-content').innerHTML = contentHTML; modal.style.display = 'flex'; };
     const hideModal = () => { document.getElementById('main-modal').style.display = 'none'; };
     const resetScene = () => { sceneObjects.forEach(data => scene.remove(data.mesh)); sceneObjects.clear(); mainCharacter = null; tabContainer.innerHTML = ''; controlPanelsContainer.innerHTML = ''; animControlsContainer.style.display = 'none'; activeObjectId = null; };
-    const centerAndOrientModel = (model) => { const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); if (size.y > 0) model.scale.setScalar(1.65 / size.y); const scaledBox = new THREE.Box3().setFromObject(model); model.position.y -= scaledBox.min.y; };
-    const loadGLB = (files, isCharacter) => { if (!files || files.length === 0) return; Array.from(files).forEach(file => { showModal(`<h2 class="modal-title">Loading Model</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); const reader = new FileReader(); reader.onload = (e) => { gltfLoader.parse(e.target.result, '', (gltf) => { if (isCharacter) resetScene(); const model = gltf.scene; model.name = file.name.replace(/\.[^/.]+$/, ""); model.userData.fileName = file.name; model.rotation.set(-Math.PI / 2, 0, Math.PI); centerAndOrientModel(model); model.traverse(node => { if (node.isMesh) node.castShadow = true; }); const objectData = { mesh: model, bones: [], mixer: null, activeAction: null, isPaused: true, }; model.traverse(node => { if (node.isBone) objectData.bones.push(node.name); }); sceneObjects.set(model.uuid, objectData); scene.add(model); if (isCharacter) mainCharacter = objectData; createUIForObject(objectData); setActiveObject(model.uuid); hideModal(); }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to parse GLB file: ${error.message}</p><button class="btn" onclick="location.reload()">Reload</button>`); console.error(error); }); }; reader.readAsArrayBuffer(file); }); };
+    
+    const loadGLB = (files, isCharacter) => {
+        if (!files || files.length === 0) return;
+        
+        Array.from(files).forEach(file => {
+            showModal(`<h2 class="modal-title">Loading Model</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                gltfLoader.parse(e.target.result, '', (gltf) => {
+                    if (isCharacter) resetScene();
+                    const model = gltf.scene;
+                    model.name = file.name.replace(/\.[^/.]+$/, "");
+
+                    // MODIFIED: Calling the new function
+                    normalizeAndCenterModel(model);
+                    
+                    model.traverse(node => { if (node.isMesh) node.castShadow = true; });
+                    
+                    const objectData = { mesh: model, bones: [], mixer: null, activeAction: null, isPaused: true, };
+                    model.traverse(node => { if (node.isBone) objectData.bones.push(node.name); });
+                    
+                    sceneObjects.set(model.uuid, objectData);
+                    scene.add(model);
+                    if (isCharacter) mainCharacter = objectData;
+
+                    createUIForObject(objectData);
+                    setActiveObject(model.uuid);
+                    hideModal();
+                }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to parse GLB file: ${error.message}</p><button class="btn" onclick="location.reload()">Reload</button>`); console.error(error); });
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    };
+    
     const loadAnimation = (file) => { if (!file || !mainCharacter) { alert("Please load a character model first!"); return; } showModal(`<h2 class="modal-title">Loading Animation</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); const reader = new FileReader(); reader.onload = (e) => { gltfLoader.parse(e.target.result, '', (gltf) => { const clip = gltf.animations[0]; if (!clip) { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>This GLB file contains no animations.</p><button class="btn" onclick="hideModal()">OK</button>`); return; } if (!mainCharacter.mixer) mainCharacter.mixer = new THREE.AnimationMixer(mainCharacter.mesh); if (mainCharacter.activeAction) mainCharacter.activeAction.stop(); const action = mainCharacter.mixer.clipAction(clip); action.setLoop(THREE.LoopRepeat, Infinity).play(); mainCharacter.activeAction = action; mainCharacter.isPaused = false; mainCharacter.mixer.timeScale = 1; playPauseBtn.textContent = 'Pause'; animControlsContainer.style.display = 'flex'; hideModal(); }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to load animation file: ${error.message}</p><button class="btn" onclick="hideModal()">OK</button>`); console.error(error); }); }; reader.readAsArrayBuffer(file); };
     const createUIForObject = (objectData) => { const tab = document.createElement('button'); tab.className = 'tab-btn'; tab.textContent = objectData.mesh.name; tab.dataset.id = objectData.mesh.uuid; tab.onclick = () => setActiveObject(objectData.mesh.uuid); tabContainer.appendChild(tab); const panel = document.createElement('div'); panel.className = 'panel'; panel.dataset.id = objectData.mesh.uuid; controlPanelsContainer.appendChild(panel); renderPanelContent(objectData); };
     const renderPanelContent = (objectData) => { const { mesh, bones } = objectData; const panel = document.querySelector(`.panel[data-id="${mesh.uuid}"]`); if (!panel) return; let panelHTML = ''; panelHTML += `<div class="control-group"><h3>Position</h3>${createSlider('pos-x', 'X', mesh.position.x, -5, 5, 0.01, mesh.uuid)}${createSlider('pos-y', 'Y', mesh.position.y, -5, 5, 0.01, mesh.uuid)}${createSlider('pos-z', 'Z', mesh.position.z, -5, 5, 0.01, mesh.uuid)}<h3>Rotation (Degrees)</h3>${createSlider('rot-x', 'X', THREE.MathUtils.radToDeg(mesh.rotation.x), -180, 180, 1, mesh.uuid)}${createSlider('rot-y', 'Y', THREE.MathUtils.radToDeg(mesh.rotation.y), -180, 180, 1, mesh.uuid)}${createSlider('rot-z', 'Z', THREE.MathUtils.radToDeg(mesh.rotation.z), -180, 180, 1, mesh.uuid)}<h3>Scale</h3>${createSlider('scale-all', 'S', mesh.scale.x, 0.1, 5, 0.01, mesh.uuid)}</div>`; if (mainCharacter && objectData !== mainCharacter) { const boneOptions = mainCharacter.bones.map(name => `<option value="${name}">${name}</option>`).join(''); panelHTML += `<div class="control-group"><h3>Attachment</h3><select class="attachment-select" data-id="${mesh.uuid}"><option value="scene">-- Detach (World) --</option>${boneOptions}</select></div>`; } panel.innerHTML = panelHTML; addEventListenersToPanel(panel, objectData); };
@@ -136,5 +179,3 @@ export function init(scene, uiContainer, onBackToDashboard) {
         return "Attachment Rig listeners & animations stopped.";
     };
 }
-
-// REMOVED: Global cleanup function is gone.
