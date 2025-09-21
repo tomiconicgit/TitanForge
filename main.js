@@ -9,16 +9,20 @@ const uiContainer = document.getElementById('ui-container');
 const dashboardBtn = document.getElementById('dashboard-btn');
 const floatingButtonsContainer = document.getElementById('floating-buttons-container');
 
-// NEW: Get cleanup screen elements
+// Get cleanup screen elements
 const cleanupScreen = document.getElementById('cleanup-screen');
 const cleanupLog = document.getElementById('cleanup-log');
+
+// NEW: Get tool loading screen elements
+const toolLoadingScreen = document.getElementById('tool-loading-screen');
+const toolLoadingLog = document.getElementById('tool-loading-log');
 
 const toolModules = {
     rigremoval: () => import('./tools/rigremoval.js'),
     attachmentrig: () => import('./tools/attachmentrig.js'),
 };
 
-function init3DViewer() {
+function init3DViewer() { /* ... function is unchanged ... */
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1c1c1e);
     scene.fog = new THREE.Fog(0x1c1c1e, 10, 50);
@@ -55,28 +59,22 @@ function init3DViewer() {
     animate();
 }
 
-function animate() {
+function animate() { /* ... function is unchanged ... */
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
 }
 
-// NEW: Helper function for logging to the cleanup screen
-function logCleanup(message) {
-    cleanupLog.innerHTML += `> ${message}\n`;
-    cleanupLog.scrollTop = cleanupLog.scrollHeight;
-}
-
-// NEW: Helper function for creating delays
+// Loggers and delay function
+function logCleanup(message) { cleanupLog.innerHTML += `> ${message}\n`; cleanupLog.scrollTop = cleanupLog.scrollHeight; }
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
+function logToolLoad(message) { toolLoadingLog.innerHTML += `> ${message}\n`; toolLoadingLog.scrollTop = toolLoadingLog.scrollHeight; }
 
-// NEW: The main cleanup process function
-async function beginCleanupTransition() {
+async function beginCleanupTransition() { /* ... function is unchanged ... */
     cleanupScreen.style.display = 'flex';
     cleanupLog.innerHTML = '';
     logCleanup("Starting cleanup...");
     await delay(200);
-
     if (currentToolModule && typeof currentToolModule.cleanup === 'function') {
         const cleanupMessage = currentToolModule.cleanup();
         logCleanup(cleanupMessage);
@@ -85,28 +83,22 @@ async function beginCleanupTransition() {
         logCleanup("No active tool to clean up.");
     }
     await delay(500);
-
-    const objectsToRemove = scene.children.filter(child => 
-        (child.isMesh || child.isGroup || child.isSkinnedMesh || child.isBone) && child.name !== 'main_floor'
-    );
+    const objectsToRemove = scene.children.filter(child => (child.isMesh || child.isGroup || child.isSkinnedMesh || child.isBone) && child.name !== 'main_floor');
     objectsToRemove.forEach(child => scene.remove(child));
     logCleanup(`Removed ${objectsToRemove.length} object(s) from scene.`);
     await delay(500);
-    
     logCleanup("Resetting UI elements...");
     dashboardBtn.style.display = 'none';
     floatingButtonsContainer.style.display = 'none';
     viewerContainer.style.display = 'none';
     await delay(200);
-    
     logCleanup("Cleanup complete. Loading dashboard...");
     await delay(750);
-
     cleanupScreen.style.display = 'none';
-    showMainMenu(); // Now, we show the main menu
+    showMainMenu();
 }
 
-// MODIFIED: showMainMenu no longer does the cleanup itself
+// MODIFIED: The dashboard buttons now call the new transition function
 function showMainMenu() {
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
@@ -117,31 +109,52 @@ function showMainMenu() {
     `;
 
     document.getElementById('rigremoval-btn').addEventListener('click', () => {
-        loadTool('rigremoval');
+        beginToolLoadTransition('rigremoval');
     });
 
     document.getElementById('attachmentrig-btn').addEventListener('click', () => {
-        loadTool('attachmentrig');
+        beginToolLoadTransition('attachmentrig');
     });
 }
 
+// NEW: The tool loading sequence
+async function beginToolLoadTransition(toolName) {
+    toolLoadingScreen.style.display = 'flex';
+    toolLoadingLog.innerHTML = '';
+    logToolLoad(`Preparing to load: ${toolName}...`);
+    await delay(500);
+
+    await loadTool(toolName); // Wait for the tool to finish its setup
+    
+    logToolLoad("Tool loaded successfully!");
+    await delay(750);
+    toolLoadingScreen.style.display = 'none';
+}
+
+// MODIFIED: loadTool is now focused only on the loading logic
 async function loadTool(toolName) {
+    logToolLoad("Showing main UI components...");
     viewerContainer.style.display = 'block';
     dashboardBtn.style.display = 'block';
     
-    uiContainer.innerHTML = `<div class="fade-in" style="display: flex; justify-content: center; align-items: center; height: 100%;"><p>Loading tool: ${toolName}...</p></div>`;
-
     try {
+        logToolLoad(`Importing '${toolName}.js' module...`);
         const module = await toolModules[toolName]();
         currentToolModule = module;
-        module.init(scene, uiContainer, beginCleanupTransition); // Pass the new function
+
+        logToolLoad("Initializing tool...");
+        await delay(250);
+        
+        // The init function now sets up the UI
+        module.init(scene, uiContainer, beginCleanupTransition);
+        
     } catch (error) {
+        logToolLoad(`ERROR: Failed to load tool. See console for details.`);
         console.error(`Failed to load or initialize tool: ${toolName}`, error);
-        uiContainer.innerHTML = `<div style="padding: 2rem; text-align: center;"><p style="color: red;">Error loading tool.</p><button class="btn" onclick="location.reload();">Reload</button></div>`;
+        uiContainer.innerHTML = `<div style="padding: 2rem; text-align: center;"><p style="color: var(--error-color);">Error loading tool.</p><button class="btn" onclick="location.reload();">Reload</button></div>`;
     }
 }
 
-// MODIFIED: The dashboard button now triggers the cleanup transition
 dashboardBtn.addEventListener('click', beginCleanupTransition);
 
 init3DViewer();
