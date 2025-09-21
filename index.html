@@ -4,20 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>TitanForge</title>
-    <link rel="manifest" href="data:application/manifest+json,{
-        &quot;name&quot;: &quot;TitanForge&quot;,
-        &quot;short_name&quot;: &quot;TitanForge&quot;,
-        &quot;start_url&quot;: &quot;.&quot;,
-        &quot;display&quot;: &quot;standalone&quot;,
-        &quot;background_color&quot;: &quot;#1c1c1e&quot;,
-        &quot;theme_color&quot;: &quot;#3a79cc&quot;,
-        &quot;description&quot;: &quot;A powerful suite of tools for 3D model editing.&quot;,
-        &quot;icons&quot;: [{
-            &quot;src&quot;: &quot;data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAAaklEQVR4nO3BMQEAAADCoPVPbQ0PoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACeDc1wAAGaT44gAAAAAElFTSuQmCC&quot;,
-            &quot;sizes&quot;: &quot;192x192&quot;,
-            &quot;type&quot;: &quot;image/png&quot;
-        }]
-    }">
+    <link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;: &quot;TitanForge&quot;,&quot;short_name&quot;: &quot;TitanForge&quot;,&quot;start_url&quot;: &quot;.&quot;,&quot;display&quot;: &quot;standalone&quot;,&quot;background_color&quot;: &quot;#1c1c1e&quot;,&quot;theme_color&quot;: &quot;#3a79cc&quot;,&quot;description&quot;: &quot;A powerful suite of tools for 3D model editing.&quot;,&quot;icons&quot;: [{&quot;src&quot;: &quot;data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAAaklEQVR4nO3BMQEAAADCoPVPbQ0PoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACeDc1wAAGaT44gAAAAAElFTSuQmCC&quot;,&quot;sizes&quot;: &quot;192x192&quot;,&quot;type&quot;: &quot;image/png&quot;}]}">
     <style>
         :root {
             --viewer-bg: #1c1c1e;
@@ -58,6 +45,7 @@
         @keyframes fade-in { to { opacity: 1; } }
         .fade-out { animation: fade-out 1s forwards; opacity: 1; }
         @keyframes fade-out { to { opacity: 0; } }
+        .btn-dropdown-container { position: relative; }
 
         #cleanup-screen, #tool-loading-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -100,24 +88,36 @@
     <div id="app-container">
         <div id="loading-screen">
             <div class="loading-title">TitanForge</div>
-            <div id="loading-bar-container">
-                <div id="loading-progress"></div>
-            </div>
+            <div id="loading-bar-container"><div id="loading-progress"></div></div>
             <div id="loading-text">Starting up...</div>
             <div id="process-log"></div>
         </div>
         <button id="dashboard-btn" class="btn dashboard">Dashboard</button>
         <div id="floating-buttons-container">
-            <button id="load-btn" class="btn">Load</button>
-            <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; min-width: 150px;">
-                <label for="char-input" class="file-label" style="margin-bottom: 0.5rem;">Load Model</label>
-                <input type="file" id="char-input" accept=".glb" hidden>
-                <label for="asset-input" class="file-label" style="margin-bottom: 0.5rem;">Load Asset</label>
-                <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
-                <label for="anim-input" class="file-label">Load Animation</label>
-                <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+            <div class="btn-dropdown-container">
+                <button id="load-btn" class="btn">Load</button>
+                <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; min-width: 150px;">
+                    <label for="char-input" class="file-label" style="margin-bottom: 0.5rem;">Load Model</label>
+                    <input type="file" id="char-input" accept=".glb" hidden>
+                    
+                    <label for="clothing-input" class="file-label" style="margin-bottom: 0.5rem;">Load Clothing</label>
+                    <input type="file" id="clothing-input" accept=".glb" multiple hidden>
+
+                    <label for="asset-input" class="file-label" style="margin-bottom: 0.5rem;">Load Asset</label>
+                    <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
+                    
+                    <label for="anim-input" class="file-label">Load Animation</label>
+                    <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+                </div>
             </div>
-            <button id="copy-btn" class="btn">Copy</button>
+
+            <div class="btn-dropdown-container">
+                <button id="copy-btn" class="btn">Copy</button>
+                <div id="copy-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; min-width: 150px;">
+                    <button id="copy-asset-btn" class="file-label" style="margin-bottom: 0.5rem;">Copy Asset</button>
+                    <button id="copy-clothing-btn" class="file-label">Copy Clothing</button>
+                </div>
+            </div>
         </div>
         <div id="viewer-container"></div>
         <div id="ui-container"></div>
