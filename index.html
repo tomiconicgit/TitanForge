@@ -90,16 +90,6 @@
             transform: scale(0.98);
             background-color: #0060d0;
         }
-        .btn.dashboard {
-            background-color: rgba(60, 60, 67, 0.5);
-            color: var(--text-color);
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            width: auto;
-            padding: 0.5rem 1rem;
-            z-index: 10;
-        }
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -149,6 +139,54 @@
             from { opacity: 1; }
             to { opacity: 0; }
         }
+
+        /* Modal Styles */
+        .modal-bg {
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            align-items: flex-end; /* Align modals to the bottom */
+            justify-content: center;
+        }
+        .modal-bg.overlay-visible {
+            background-color: rgba(0,0,0,0.4);
+            pointer-events: auto; /* Enable interaction with the modal */
+        }
+        .modal-content {
+            background: var(--panel-bg);
+            border-radius: 24px 24px 0 0;
+            padding: 30px;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transform: translateY(100%);
+            animation: modal-slide-in 0.3s forwards;
+            color: var(--text-color);
+        }
+        @keyframes modal-slide-in {
+            to { transform: translateY(0); }
+        }
+        .modal-loader {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -162,7 +200,6 @@
             <div id="process-log"></div>
         </div>
     </div>
-    
     <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
     <script src="loading.js" type="module"></script>
 </body>
