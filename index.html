@@ -20,7 +20,6 @@
     }">
     <style>
         :root {
-            /* Dark Mode Variables */
             --viewer-bg: #1c1c1e;
             --ui-bg: rgba(28, 28, 30, 0.7);
             --panel-bg: rgba(44, 44, 46, 0.8);
@@ -139,20 +138,19 @@
             from { opacity: 1; }
             to { opacity: 0; }
         }
-
-        /* Modal Styles */
         .modal-bg {
             position: fixed;
             z-index: 100;
             left: 0; top: 0;
             width: 100%; height: 100%;
             display: flex;
-            align-items: flex-end; /* Align modals to the bottom */
+            align-items: flex-end;
             justify-content: center;
+            pointer-events: none;
         }
         .modal-bg.overlay-visible {
             background-color: rgba(0,0,0,0.4);
-            pointer-events: auto; /* Enable interaction with the modal */
+            pointer-events: auto;
         }
         .modal-content {
             background: var(--panel-bg);
