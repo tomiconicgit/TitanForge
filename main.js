@@ -8,10 +8,12 @@ const toolModules = {
 
 function showMainMenu() {
     appContainer.innerHTML = `
-        <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
-            <h2>Choose a Tool</h2>
-            <button class="btn" id="rigremoval-btn">Rig Removal Tool</button>
-            <button class="btn" id="attachmentrig-btn">Attachment Rig Tool</button>
+        <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem; align-items: center; justify-content: center; height: 100%;">
+            <h2 style="font-size: 1.5rem;">Choose a Tool</h2>
+            <div style="display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 300px;">
+                <button class="btn" id="rigremoval-btn">Rig Removal Tool</button>
+                <button class="btn" id="attachmentrig-btn">Attachment Rig Tool</button>
+            </div>
         </div>
     `;
 
