@@ -42,7 +42,6 @@ export function init(appContainer, onBackToDashboard) {
         </div>
     `;
 
-    // References to all UI elements
     const viewerContainer = document.getElementById('viewer-container');
     const uiContainer = document.getElementById('ui-container');
     const dashboardBtn = document.getElementById('dashboard-btn');
@@ -60,7 +59,7 @@ export function init(appContainer, onBackToDashboard) {
     const stepBackBtn = document.querySelector('.step-back-btn');
     const mainModal = document.getElementById('main-modal');
     const modalContent = document.getElementById('modal-content');
-
+    
     const gltfLoader = new GLTFLoader();
 
     function init3DViewer() {
@@ -129,6 +128,17 @@ export function init(appContainer, onBackToDashboard) {
         controlPanelsContainer.innerHTML = '';
         animControlsContainer.style.display = 'none';
         activeObjectId = null;
+        if (scene) {
+            scene.children.slice().forEach(child => {
+                if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh' || child.type === 'Bone') {
+                    scene.remove(child);
+                }
+            });
+        }
+        if (renderer) {
+            viewerContainer.removeChild(renderer.domElement);
+            renderer.dispose();
+        }
     };
 
     const centerAndOrientModel = (model) => {
@@ -372,7 +382,10 @@ export function init(appContainer, onBackToDashboard) {
             mainCharacter.mixer.update(delta);
         }
     };
-    
+
+    init3DViewer();
+    animateTool();
+
     // Event listeners
     loadBtn.addEventListener('click', () => {
         loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
@@ -411,7 +424,4 @@ export function init(appContainer, onBackToDashboard) {
         resetScene();
         onBackToDashboard();
     });
-
-    init3DViewer();
-    animateTool();
 }
