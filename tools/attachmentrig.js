@@ -299,7 +299,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
         tab.textContent = objectData.mesh.name;
         tab.dataset.id = objectData.mesh.uuid;
         tab.onclick = () => setActiveObject(objectData.mesh.uuid);
-        floatingTabContainer.appendChild(tab);
+        tabContainer.appendChild(tab);
 
         const panel = document.createElement('div');
         panel.className = 'panel';
@@ -411,6 +411,21 @@ export function init(scene, uiContainer, onBackToDashboard) {
             alert("Failed to copy code.");
         });
     };
+
+    // --- START: ADDED CODE ---
+    loadBtn.addEventListener('click', (event) => {
+        event.stopPropagation(); // Prevents the window click listener from firing immediately
+        const isHidden = loadDropdown.style.display === 'none';
+        loadDropdown.style.display = isHidden ? 'block' : 'none';
+    });
+
+    // Close dropdown if user clicks anywhere else
+    window.addEventListener('click', () => {
+        if (loadDropdown.style.display === 'block') {
+            loadDropdown.style.display = 'none';
+        }
+    });
+    // --- END: ADDED CODE ---
 
     charInput.addEventListener('change', (e) => loadGLB(e.target.files, true));
     assetInput.addEventListener('change', (e) => loadGLB(e.target.files, false));
