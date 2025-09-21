@@ -1,10 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TitanForge</title>
+    <link rel="manifest" href="data:application/manifest+json,{
+        &quot;name&quot;: &quot;TitanForge&quot;,
+        &quot;short_name&quot;: &quot;TitanForge&quot;,
+        &quot;start_url&quot;: &quot;.&quot;,
+        &quot;display&quot;: &quot;standalone&quot;,
+        &quot;background_color&quot;: &quot;#1c1c1e&quot;,
+        &quot;theme_color&quot;: &quot;#3a79cc&quot;,
+        &quot;description&quot;: &quot;A powerful suite of tools for 3D model editing.&quot;,
+        &quot;icons&quot;: [{
+            &quot;src&quot;: &quot;data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAAaklEQVR4nO3BMQEAAADCoPVPbQ0PoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACeDc1wAAGaT44gAAAAAElFTSuQmCC&quot;,
+            &quot;sizes&quot;: &quot;192x192&quot;,
+            &quot;type&quot;: &quot;image/png&quot;
+        }]
+    }">
     <style>
-        /* ... your existing styles ... */
+        :root {
+            --viewer-bg: #1c1c1e;
+            --ui-bg: rgba(28, 28, 30, 0.7);
+            --panel-bg: rgba(44, 44, 46, 0.8);
+            --primary-color: #0a84ff;
+            --text-color: #f2f2f7;
+            --secondary-text-color: #92929a;
+            --border-color: rgba(60, 60, 67, 0.5);
+            --shadow-color: rgba(0, 0, 0, 0.3);
+            --error-color: #ff453a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex; flex-direction: column; background-color: var(--viewer-bg);
+            touch-action: none;
+            color: var(--text-color);
+        }
+        #app-container { flex-grow: 1; display: flex; flex-direction: column; position: relative; }
+        #viewer-container { flex-grow: 1; position: relative; min-height: 200px; }
+        #ui-container { flex-shrink: 0; height: 40vh; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: var(--ui-bg); border-top: 1px solid var(--border-color); padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; color: var(--text-color); }
+        #loading-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--viewer-bg); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .loading-title { font-size: 2rem; font-weight: bold; color: var(--text-color); margin-bottom: 2rem; }
+        #loading-bar-container { width: 80%; max-width: 400px; height: 8px; background: rgba(60, 60, 67, 0.3); border-radius: 4px; overflow: hidden; }
+        #loading-progress { height: 100%; width: 0; background: var(--primary-color); transition: width 0.3s ease; }
+        #loading-text { margin-top: 10px; font-size: 0.9rem; color: var(--secondary-text-color); text-align: center; }
+        #process-log { margin-top: 20px; width: 80%; max-width: 400px; height: 150px; background: rgba(60, 60, 67, 0.2); border-radius: 8px; padding: 10px; font-size: 0.8rem; color: var(--secondary-text-color); overflow-y: scroll; }
+        .btn { display: block; width: 100%; padding: 0.8rem; border: none; border-radius: 12px; font-size: 0.9rem; font-weight: 600; text-align: center; cursor: pointer; background-color: var(--primary-color); color: white; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease; }
+        .btn:active:not(:disabled) { transform: scale(0.98); }
+        .btn.dashboard { background-color: rgba(60, 60, 67, 0.5); color: var(--text-color); position: absolute; top: 1rem; right: 1rem; width: auto; padding: 0.5rem 1rem; display: none; z-index: 10; }
+        #floating-buttons-container { position: absolute; top: 1rem; left: 1rem; z-index: 10; display: none; flex-direction: row; gap: 0.5rem; }
+        #floating-buttons-container .btn { width: auto; padding: 0.5rem 1rem; }
+        .fade-in { animation: fade-in 1s forwards; opacity: 0; }
+        @keyframes fade-in { to { opacity: 1; } }
+        .fade-out { animation: fade-out 1s forwards; opacity: 1; }
+        @keyframes fade-out { to { opacity: 0; } }
 
-        /* ADD THESE NEW STYLES */
+        /* Styles for the new cleanup screen */
         #cleanup-screen {
             position: absolute;
             top: 0; left: 0;
@@ -55,6 +108,29 @@
     </div>
 
     <div id="app-container">
+        <div id="loading-screen">
+            <div class="loading-title">TitanForge</div>
+            <div id="loading-bar-container">
+                <div id="loading-progress"></div>
+            </div>
+            <div id="loading-text">Starting up...</div>
+            <div id="process-log"></div>
+        </div>
+        <button id="dashboard-btn" class="btn dashboard">Dashboard</button>
+        <div id="floating-buttons-container">
+            <button id="load-btn" class="btn">Load</button>
+            <div id="load-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--panel-bg); border-radius: 8px; padding: 0.5rem; z-index: 11; width: 100%;">
+                <label for="char-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Model</label>
+                <input type="file" id="char-input" accept=".glb" hidden>
+                <label for="asset-input" class="btn file-label" style="width: auto; margin-bottom: 0.5rem;">Asset</label>
+                <input type="file" id="asset-input" accept=".glb, .gltf" multiple hidden>
+                <label for="anim-input" class="btn file-label" style="width: auto;">Animation</label>
+                <input type="file" id="anim-input" accept=".glb, .gltf" hidden>
+            </div>
+            <button id="copy-btn" class="btn">Copy</button>
+        </div>
+        <div id="viewer-container"></div>
+        <div id="ui-container"></div>
         </div>
     
     <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
