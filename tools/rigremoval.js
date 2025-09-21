@@ -59,31 +59,34 @@ export function init(appContainer, onBackToDashboard) {
                 z-index: 100;
                 left: 0; top: 0;
                 width: 100%; height: 100%;
-                background-color: rgba(0,0,0,0.4);
                 display: flex;
-                align-items: center;
+                align-items: flex-end;
                 justify-content: center;
+                pointer-events: none; /* Allows interaction with the viewer */
+            }
+            .modal-bg.overlay-visible {
+                background-color: rgba(0,0,0,0.4);
+                pointer-events: auto; /* Re-enables interaction for the modal itself */
             }
             .modal-content {
                 background: var(--panel-bg);
-                border-radius: 24px;
+                border-radius: 24px 24px 0 0;
                 padding: 30px;
-                width: 90%;
+                width: 100%;
                 max-width: 400px;
                 text-align: center;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
                 backdrop-filter: blur(40px);
                 -webkit-backdrop-filter: blur(40px);
                 display: flex;
                 flex-direction: column;
                 gap: 1.5rem;
-                transform: scale(0.9);
-                opacity: 0;
-                animation: modal-fade-in 0.3s forwards;
+                transform: translateY(100%);
+                animation: modal-slide-in 0.3s forwards;
                 color: var(--text-color);
             }
-            @keyframes modal-fade-in {
-                to { transform: scale(1); opacity: 1; }
+            @keyframes modal-slide-in {
+                to { transform: translateY(0); }
             }
             .modal-loader {
                 border: 4px solid var(--border-color);
@@ -97,6 +100,16 @@ export function init(appContainer, onBackToDashboard) {
             @keyframes spin {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
+            }
+            .file-label {
+                display: block; width: 100%; padding: 0.8rem; border: 1px solid var(--border-color);
+                border-radius: 12px; font-size: 0.9rem; font-weight: 500;
+                text-align: center; cursor: pointer;
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                background-color: var(--panel-bg);
+                color: var(--text-color);
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
         </style>
 
@@ -199,20 +212,24 @@ export function init(appContainer, onBackToDashboard) {
     const showModal = (contentHTML) => {
         modalContent.innerHTML = contentHTML;
         mainModal.style.display = 'flex';
+        mainModal.classList.add('overlay-visible');
     };
 
     const hideModal = () => {
         mainModal.style.display = 'none';
+        mainModal.classList.remove('overlay-visible');
         modalContent.innerHTML = '';
     };
 
     const showRenameModal = () => {
         filenameInput.value = exportFileName.replace('.glb', '');
         renameModal.style.display = 'flex';
+        renameModal.classList.add('overlay-visible');
     };
 
     const hideRenameModal = () => {
         renameModal.style.display = 'none';
+        renameModal.classList.remove('overlay-visible');
     };
     
     const resetToolState = () => {
@@ -319,9 +336,12 @@ export function init(appContainer, onBackToDashboard) {
             <button class="btn dashboard" id="cancel-load-btn">Dashboard</button>
         `);
     
+        const modal = document.getElementById('main-modal');
         const modelInput = document.getElementById('rig-model-input');
         const cancelLoadBtn = document.getElementById('cancel-load-btn');
         
+        modal.classList.add('overlay-visible');
+
         modelInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
@@ -332,7 +352,7 @@ export function init(appContainer, onBackToDashboard) {
         });
     
         cancelLoadBtn.addEventListener('click', () => {
-            hideModal();
+            resetToolState();
             onBackToDashboard();
         });
     };
