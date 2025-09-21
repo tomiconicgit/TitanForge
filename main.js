@@ -9,13 +9,16 @@ const uiContainer = document.getElementById('ui-container');
 const dashboardBtn = document.getElementById('dashboard-btn');
 const floatingButtonsContainer = document.getElementById('floating-buttons-container');
 
+// NEW: Get cleanup screen elements
+const cleanupScreen = document.getElementById('cleanup-screen');
+const cleanupLog = document.getElementById('cleanup-log');
+
 const toolModules = {
     rigremoval: () => import('./tools/rigremoval.js'),
     attachmentrig: () => import('./tools/attachmentrig.js'),
 };
 
 function init3DViewer() {
-    // ... (no changes in this function)
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1c1c1e);
     scene.fog = new THREE.Fog(0x1c1c1e, 10, 50);
@@ -53,30 +56,58 @@ function init3DViewer() {
 }
 
 function animate() {
-    // ... (no changes in this function)
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
 }
 
-function cleanUpCurrentTool() {
-    // ... (no changes in this function)
+// NEW: Helper function for logging to the cleanup screen
+function logCleanup(message) {
+    cleanupLog.innerHTML += `> ${message}\n`;
+    cleanupLog.scrollTop = cleanupLog.scrollHeight;
+}
+
+// NEW: Helper function for creating delays
+const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
+// NEW: The main cleanup process function
+async function beginCleanupTransition() {
+    cleanupScreen.style.display = 'flex';
+    cleanupLog.innerHTML = '';
+    logCleanup("Starting cleanup...");
+    await delay(200);
+
     if (currentToolModule && typeof currentToolModule.cleanup === 'function') {
-        currentToolModule.cleanup();
+        const cleanupMessage = currentToolModule.cleanup();
+        logCleanup(cleanupMessage);
+        currentToolModule = null;
+    } else {
+        logCleanup("No active tool to clean up.");
     }
-    currentToolModule = null;
+    await delay(500);
+
     const objectsToRemove = scene.children.filter(child => 
         (child.isMesh || child.isGroup || child.isSkinnedMesh || child.isBone) && child.name !== 'main_floor'
     );
     objectsToRemove.forEach(child => scene.remove(child));
-}
-
-function showMainMenu() {
-    cleanUpCurrentTool();
+    logCleanup(`Removed ${objectsToRemove.length} object(s) from scene.`);
+    await delay(500);
+    
+    logCleanup("Resetting UI elements...");
     dashboardBtn.style.display = 'none';
     floatingButtonsContainer.style.display = 'none';
-    viewerContainer.style.display = 'none'; // ADD THIS LINE to hide the 3D viewer
+    viewerContainer.style.display = 'none';
+    await delay(200);
+    
+    logCleanup("Cleanup complete. Loading dashboard...");
+    await delay(750);
 
+    cleanupScreen.style.display = 'none';
+    showMainMenu(); // Now, we show the main menu
+}
+
+// MODIFIED: showMainMenu no longer does the cleanup itself
+function showMainMenu() {
     uiContainer.innerHTML = `
         <div class="fade-in" style="display: flex; flex-direction: column; gap: 1rem; padding: 2rem;">
             <h2>Choose a Tool</h2>
@@ -95,30 +126,23 @@ function showMainMenu() {
 }
 
 async function loadTool(toolName) {
-    cleanUpCurrentTool(); 
-    
-    viewerContainer.style.display = 'block'; // ADD THIS LINE to show the 3D viewer
+    viewerContainer.style.display = 'block';
     dashboardBtn.style.display = 'block';
     
-    uiContainer.innerHTML = `
-        <div class="fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-            <p>Loading tool: ${toolName}...</p>
-        </div>
-    `;
+    uiContainer.innerHTML = `<div class="fade-in" style="display: flex; justify-content: center; align-items: center; height: 100%;"><p>Loading tool: ${toolName}...</p></div>`;
 
     try {
         const module = await toolModules[toolName]();
         currentToolModule = module;
-        module.init(scene, uiContainer, showMainMenu);
-
+        module.init(scene, uiContainer, beginCleanupTransition); // Pass the new function
     } catch (error) {
-        // ... (no changes here)
         console.error(`Failed to load or initialize tool: ${toolName}`, error);
-        uiContainer.innerHTML = `<div style="padding: 2rem; text-align: center;"><p style="color: red;">Error loading tool. Please try again.</p><button class="btn" onclick="location.reload();">Reload</button></div>`;
+        uiContainer.innerHTML = `<div style="padding: 2rem; text-align: center;"><p style="color: red;">Error loading tool.</p><button class="btn" onclick="location.reload();">Reload</button></div>`;
     }
 }
 
-dashboardBtn.addEventListener('click', showMainMenu);
+// MODIFIED: The dashboard button now triggers the cleanup transition
+dashboardBtn.addEventListener('click', beginCleanupTransition);
 
 init3DViewer();
 showMainMenu();
