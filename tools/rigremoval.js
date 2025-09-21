@@ -5,34 +5,24 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
-let eventListeners = [];
-let styleElement = null; // Reference to the created <style> element
-
-export function cleanup() {
-    console.log("Cleaning up Rig Removal tool...");
-    
-    // Remove all tracked event listeners
-    eventListeners.forEach(({ target, type, handler }) => {
-        target.removeEventListener(type, handler);
-    });
-    eventListeners = []; // Clear the array
-
-    // Remove the style tag from the document head if it exists
-    if (styleElement && styleElement.parentNode) {
-        styleElement.parentNode.removeChild(styleElement);
-    }
-    styleElement = null;
-    
-    return "Rig Removal listeners & styles removed.";
-}
 
 export function init(scene, uiContainer, onBackToDashboard) {
+    // STATE IS NOW LOCAL
+    const eventListeners = [];
+    let styleElement = null;
     let currentModel = null;
     let objString = null;
     let originalMaterials = new Map();
     let isProcessing = false;
     let exportFileName = 'model_static.glb';
 
+    // Helper to track listeners locally
+    function addTrackedListener(target, type, handler) {
+        target.addEventListener(type, handler);
+        eventListeners.push({ target, type, handler });
+    }
+
+    // --- UI AND ELEMENT SELECTION ---
     uiContainer.innerHTML = `
         <div id="rig-removal-ui-container" style="display: flex; flex-direction: column; height: 100%; justify-content: flex-end;">
             <div id="export-panel" class="card" style="display: none; padding: 1rem; text-align: center;">
@@ -78,42 +68,26 @@ export function init(scene, uiContainer, onBackToDashboard) {
     const objExporter = new OBJExporter(); 
     const objLoader = new OBJLoader(); 
     const gltfExporter = new GLTFExporter(); 
+
+    // NEW/IMPROVED: Replaces the old centerAndOrientModel function
+    function normalizeAndCenterModel(model) {
+        model.rotation.set(-Math.PI / 2, 0, Math.PI);
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const targetHeight = 1.75;
+        if (size.y > 0) {
+            const scaleFactor = targetHeight / size.y;
+            model.scale.setScalar(scaleFactor);
+        }
+        const scaledBox = new THREE.Box3().setFromObject(model);
+        model.position.y = -scaledBox.min.y;
+    }
     
-    const showModal = (contentHTML) => { 
-        modalContent.innerHTML = contentHTML; 
-        mainModal.style.display = 'flex'; 
-    }; 
-    
-    const hideModal = () => { 
-        mainModal.style.display = 'none'; 
-        modalContent.innerHTML = ''; 
-    }; 
-    
-    const showRenameModal = () => { 
-        filenameInput.value = exportFileName.replace('.glb', ''); 
-        renameModal.style.display = 'flex'; 
-    }; 
-    
-    const hideRenameModal = () => { 
-        renameModal.style.display = 'none'; 
-    }; 
-    
-    const resetToolState = () => { 
-        if (currentModel) scene.remove(currentModel); 
-        currentModel = null; 
-        objString = null; 
-        originalMaterials.clear(); 
-        exportPanel.style.display = 'none'; 
-        hideModal(); 
-    }; 
-    
-    const centerAndOrientModel = (model) => { 
-        const box = new THREE.Box3().setFromObject(model); 
-        const size = box.getSize(new THREE.Vector3()); 
-        if (size.y > 0) model.scale.setScalar(1.65 / size.y); 
-        const scaledBox = new THREE.Box3().setFromObject(model); 
-        model.position.y -= scaledBox.min.y; 
-    }; 
+    const showModal = (contentHTML) => { modalContent.innerHTML = contentHTML; mainModal.style.display = 'flex'; }; 
+    const hideModal = () => { mainModal.style.display = 'none'; modalContent.innerHTML = ''; }; 
+    const showRenameModal = () => { filenameInput.value = exportFileName.replace('.glb', ''); renameModal.style.display = 'flex'; }; 
+    const hideRenameModal = () => { renameModal.style.display = 'none'; }; 
+    const resetToolState = () => { if (currentModel) scene.remove(currentModel); currentModel = null; objString = null; originalMaterials.clear(); exportPanel.style.display = 'none'; hideModal(); }; 
     
     const initLoadModal = () => { 
         showModal(`
@@ -126,119 +100,65 @@ export function init(scene, uiContainer, onBackToDashboard) {
         const modelInput = document.getElementById('rig-model-input'); 
         const cancelLoadBtn = document.getElementById('cancel-load-btn'); 
         
-        const modelChangeHandler = (event) => { 
-            const file = event.target.files[0]; 
-            if (file) { 
-                loadGLBAndShowProcess(file); 
-            } else { 
-                hideModal(); 
-            } 
-        }; 
-        
-        const cancelLoadHandler = () => { 
-            hideModal(); 
-            onBackToDashboard(); 
-        }; 
+        const modelChangeHandler = (event) => { const file = event.target.files[0]; if (file) { loadGLBAndShowProcess(file); } else { hideModal(); } }; 
+        const cancelLoadHandler = () => { hideModal(); onBackToDashboard(); }; 
         
         addTrackedListener(modelInput, 'change', modelChangeHandler); 
         addTrackedListener(cancelLoadBtn, 'click', cancelLoadHandler); 
     }; 
     
     const loadGLBAndShowProcess = (file) => { 
-        showModal(`
-            <h2 class="modal-title">Loading Model</h2>
-            <p>Processing file: ${file.name}</p>
-            <div class="modal-loader"></div>
-        `); 
+        showModal(`<h2 class="modal-title">Loading Model</h2><p>Processing file: ${file.name}</p><div class="modal-loader"></div>`); 
         const reader = new FileReader(); 
         reader.onload = (e) => { 
             gltfLoader.parse(e.target.result, '', (gltf) => { 
                 const model = gltf.scene; 
                 originalMaterials.clear(); 
-                model.traverse(node => { 
-                    if (node.isMesh && node.material) { 
-                        originalMaterials.set(node.name, node.material.clone()); 
-                    } 
-                }); 
-                scene.children.slice().forEach(child => { 
-                    if (child.type === 'Mesh' || child.type === 'Group' || child.type === 'SkinnedMesh') { 
-                        scene.remove(child); 
-                    } 
-                }); 
+                model.traverse(node => { if (node.isMesh && node.material) { originalMaterials.set(node.name, node.material.clone()); } }); 
+                
+                scene.children.slice().forEach(child => { if (child.isMesh || child.isGroup || child.isSkinnedMesh) { scene.remove(child); } }); 
                 scene.add(model); 
-                model.rotation.set(-Math.PI / 2, 0, Math.PI); 
-                centerAndOrientModel(model); 
+                
+                // MODIFIED: Calling the new function
+                normalizeAndCenterModel(model);
+                
                 currentModel = model; 
                 hideModal(); 
                 showProcessModal(); 
-            }, (error) => { 
-                showModal(`
-                    <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
-                    <p>Failed to parse GLB file. Check the console for details.</p>
-                    <button class="btn" id="reload-btn">Reload</button>
-                `); 
-                document.getElementById('reload-btn').addEventListener('click', () => location.reload()); 
-                console.error(error); 
-            }); 
+            }, (error) => { showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Failed to parse GLB file. Check the console for details.</p><button class="btn" id="reload-btn">Reload</button>`); document.getElementById('reload-btn').addEventListener('click', () => location.reload()); console.error(error); }); 
         }; 
         reader.readAsArrayBuffer(file); 
     }; 
     
     const showProcessModal = () => { 
-        showModal(`
-            <h2 class="modal-title">Model Loaded</h2>
-            <p>Your model is ready. What would you like to do?</p>
-            <button class="btn" id="remove-rig-btn">Remove Rig</button>
-            <button class="btn dashboard" id="cancel-process-btn">Dashboard</button>
-        `); 
+        showModal(`<h2 class="modal-title">Model Loaded</h2><p>Your model is ready. What would you like to do?</p><button class="btn" id="remove-rig-btn">Remove Rig</button><button class="btn dashboard" id="cancel-process-btn">Dashboard</button>`); 
         const removeRigBtn = document.getElementById('remove-rig-btn'); 
         const cancelProcessBtn = document.getElementById('cancel-process-btn'); 
         addTrackedListener(removeRigBtn, 'click', removeRig); 
-        addTrackedListener(cancelProcessBtn, 'click', () => { 
-            resetToolState(); 
-            onBackToDashboard(); 
-        }); 
+        addTrackedListener(cancelProcessBtn, 'click', () => { resetToolState(); onBackToDashboard(); }); 
     }; 
     
     const removeRig = () => { 
         if (isProcessing) return; 
         isProcessing = true; 
-        showModal(`
-            <h2 class="modal-title">Removing Rig</h2>
-            <p>This may take a moment...</p>
-            <div class="modal-loader"></div>
-        `); 
+        showModal(`<h2 class="modal-title">Removing Rig</h2><p>This may take a moment...</p><div class="modal-loader"></div>`); 
         setTimeout(() => { 
             try { 
-                if (currentModel.animations && currentModel.animations.length > 0) { 
-                    const mixer = new THREE.AnimationMixer(currentModel); 
-                    mixer.setTime(0); 
-                    mixer.update(0); 
-                } 
+                if (currentModel.animations && currentModel.animations.length > 0) { const mixer = new THREE.AnimationMixer(currentModel); mixer.setTime(0); mixer.update(0); } 
                 objString = objExporter.parse(currentModel); 
                 isProcessing = false; 
                 completeProcess(); 
             } catch (e) { 
                 isProcessing = false; 
-                showModal(`
-                    <h2 class="modal-title" style="color: var(--error-color);">Error</h2>
-                    <p>Rig removal failed: ${e.message}</p>
-                    <button class="btn" id="error-close-btn">Close</button>
-                `); 
-                document.getElementById('error-close-btn').addEventListener('click', () => { 
-                    hideModal(); 
-                }); 
+                showModal(`<h2 class="modal-title" style="color: var(--error-color);">Error</h2><p>Rig removal failed: ${e.message}</p><button class="btn" id="error-close-btn">Close</button>`); 
+                document.getElementById('error-close-btn').addEventListener('click', () => { hideModal(); }); 
                 console.error(e); 
             } 
         }, 500); 
     }; 
     
     const completeProcess = () => { 
-        showModal(`
-            <h2 class="modal-title">Rig Removed!</h2>
-            <p>The model is now de-rigged and ready to be exported.</p>
-            <button class="btn" id="complete-btn">Complete</button>
-        `); 
+        showModal(`<h2 class="modal-title">Rig Removed!</h2><p>The model is now de-rigged and ready to be exported.</p><button class="btn" id="complete-btn">Complete</button>`); 
         addTrackedListener(document.getElementById('complete-btn'), 'click', finalizeModel); 
     }; 
     
@@ -246,44 +166,30 @@ export function init(scene, uiContainer, onBackToDashboard) {
         hideModal(); 
         if (currentModel) scene.remove(currentModel); 
         const deRiggedModel = objLoader.parse(objString); 
-        centerAndOrientModel(deRiggedModel); 
-        deRiggedModel.rotation.set(0, 0, 0); 
-        deRiggedModel.traverse(node => { 
-            if (node.isMesh) { 
-                const originalMaterial = originalMaterials.get(node.name); 
-                if (originalMaterial) { 
-                    node.material = originalMaterial; 
-                } else { 
-                    node.material = new THREE.MeshStandardMaterial({ color: 0x999999 }); 
-                } 
-            } 
-        }); 
+        
+        // Use a simpler centering logic for the de-rigged model, without forced rotation
+        const box = new THREE.Box3().setFromObject(deRiggedModel);
+        const size = box.getSize(new THREE.Vector3());
+        if (size.y > 0) deRiggedModel.scale.setScalar(1.75 / size.y);
+        const scaledBox = new THREE.Box3().setFromObject(deRiggedModel);
+        deRiggedModel.position.y = -scaledBox.min.y;
+
+        deRiggedModel.traverse(node => { if (node.isMesh) { const originalMaterial = originalMaterials.get(node.name); if (originalMaterial) { node.material = originalMaterial; } else { node.material = new THREE.MeshStandardMaterial({ color: 0x999999 }); } } }); 
         currentModel = deRiggedModel; 
         scene.add(currentModel); 
         exportPanel.style.display = 'flex'; 
     };
 
-    function addTrackedListener(target, type, handler) {
-        target.addEventListener(type, handler);
-        eventListeners.push({ target, type, handler });
-    }
-
     addTrackedListener(renameBtn, 'click', showRenameModal);
-    
     addTrackedListener(confirmRenameBtn, 'click', () => {
         const newName = filenameInput.value.trim();
         exportFileName = newName ? (newName.endsWith('.glb') ? newName : `${newName}.glb`) : 'model_static.glb';
         hideRenameModal();
     });
-
     addTrackedListener(cancelRenameBtn, 'click', hideRenameModal);
-
     addTrackedListener(exportGlbBtn, 'click', () => {
         if (!currentModel) return;
-        showModal(`
-            <h2 class="modal-title">Preparing Download</h2>
-            <div class="modal-loader"></div>
-        `);
+        showModal(`<h2 class="modal-title">Preparing Download</h2><div class="modal-loader"></div>`);
         setTimeout(() => {
             gltfExporter.parse(currentModel, (result) => {
                 const blob = new Blob([result], { type: 'model/gltf-binary' });
@@ -294,11 +200,7 @@ export function init(scene, uiContainer, onBackToDashboard) {
                 URL.revokeObjectURL(link.href);
                 hideModal();
             }, (error) => {
-                showModal(`
-                    <h2 class="modal-title" style="color: var(--error-color);">Export Failed</h2>
-                    <p>An error occurred.</p>
-                    <button class="btn" id="error-close-btn">Close</button>
-                `);
+                showModal(`<h2 class="modal-title" style="color: var(--error-color);">Export Failed</h2><p>An error occurred.</p><button class="btn" id="error-close-btn">Close</button>`);
                 addTrackedListener(document.getElementById('error-close-btn'),'click', hideModal);
                 console.error('An error happened during parsing', error);
             }, { binary: true });
@@ -306,4 +208,16 @@ export function init(scene, uiContainer, onBackToDashboard) {
     });
 
     initLoadModal();
+
+    // RETURN THE CLEANUP FUNCTION
+    return function cleanup() {
+        console.log("Cleaning up Rig Removal tool...");
+        eventListeners.forEach(({ target, type, handler }) => {
+            target.removeEventListener(type, handler);
+        });
+        if (styleElement && styleElement.parentNode) {
+            styleElement.parentNode.removeChild(styleElement);
+        }
+        return "Rig Removal listeners & styles removed.";
+    };
 }
