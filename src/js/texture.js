@@ -8,15 +8,9 @@
     let selectedMesh = null;
     let mapTypeToLoad = null;
 
-    // A mapping from our UI names to three.js material properties
-    const MAP_CONFIG = {
-        'Albedo': { prop: 'map', colorSpace: THREE.SRGBColorSpace },
-        'Normal': { prop: 'normalMap' },
-        'Metalness': { prop: 'metalnessMap' },
-        'Roughness': { prop: 'roughnessMap' },
-        'AO': { prop: 'aoMap' },
-        'Emissive': { prop: 'emissiveMap', colorSpace: THREE.SRGBColorSpace },
-    };
+    // **FIX**: Declare MAP_CONFIG here, but define it inside bootstrap
+    // to ensure THREE is available.
+    let MAP_CONFIG;
 
     // --- UI Injection ---
     function injectUI() {
@@ -111,6 +105,7 @@
             resetPanel();
             return;
         }
+        const { THREE } = window.Phonebook;
 
         const meshes = [];
         activeAsset.object.traverse(obj => {
@@ -147,7 +142,8 @@
 
     function handleTextureFile(file) {
         if (!file || !selectedMesh || !mapTypeToLoad) return;
-
+        
+        const { THREE } = window.Phonebook;
         const reader = new FileReader();
         reader.onload = (e) => {
             const textureLoader = new THREE.TextureLoader();
@@ -185,6 +181,7 @@
         App.on('asset:activated', handleAssetActivated);
 
         meshSelect.addEventListener('change', () => {
+            if (!activeAsset) return;
             const uuid = meshSelect.value;
             selectedMesh = activeAsset.object.getObjectByProperty('uuid', uuid);
         });
@@ -209,6 +206,17 @@
     function bootstrap() {
         if (window.Textures) return;
         const { THREE } = window.Phonebook;
+        
+        // **FIX**: Define MAP_CONFIG here now that THREE is guaranteed to exist.
+        MAP_CONFIG = {
+            'Albedo': { prop: 'map', colorSpace: THREE.SRGBColorSpace },
+            'Normal': { prop: 'normalMap' },
+            'Metalness': { prop: 'metalnessMap' },
+            'Roughness': { prop: 'roughnessMap' },
+            'AO': { prop: 'aoMap' },
+            'Emissive': { prop: 'emissiveMap', colorSpace: THREE.SRGBColorSpace },
+        };
+        
         injectUI();
         wireEvents();
         window.Textures = {};
