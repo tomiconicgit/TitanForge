@@ -75,9 +75,6 @@
       Task.start('director', 'Director starting');
 
       try {
-        // Show global loader before stages run
-        window.App.emit('global-loader:show'); // Emit custom event to show global loader
-
         // Bind phonebook (Three, OrbitControls, GLTFLoader)
         this.phonebook = window.Phonebook || null;
         if (!this.phonebook) throw new Error('Phonebook missing (entry script did not expose modules).');
@@ -109,13 +106,8 @@
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
 
-        // Hide global loader after all stages are done
-        window.App.emit('global-loader:hide'); // Emit custom event to hide global loader
-
       } catch (e) {
         Task.fail('director', e);
-        // Hide global loader even on error
-        window.App.emit('global-loader:hide');
         throw e;
       }
     }
@@ -123,14 +115,6 @@
 
   // Expose globally for later modules to use
   window.App = App;
-
-  // ---- Manage Global 3D Loader Visibility ---------------------------------
-  const globalLoader = document.getElementById('tf-global-loader');
-  if (globalLoader) {
-    window.App.on('global-loader:show', () => globalLoader.classList.add('show'));
-    window.App.on('global-loader:hide', () => globalLoader.classList.remove('show'));
-  }
-
 
   // ---- Start after loader’s Continue (and be robust to different dispatchers)
   const kick = () => window.App.start();
