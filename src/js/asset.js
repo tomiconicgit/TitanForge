@@ -97,7 +97,8 @@
                     vertices: vertexCount,
                     polygons: Math.floor(triangleCount),
                     fileSize: formatBytes(file.size),
-                    object: asset
+                    object: asset,
+                    isMainModel: false // **FIX**: Identify this as an asset
                 };
                 
                 // Notify other modules that an asset has been added
