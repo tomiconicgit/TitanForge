@@ -3,9 +3,9 @@
 (function () {
     'use strict';
 
-    let panel, activeAsset, mainModel;
+    let panel, activeAsset, mainModel, boneModal;
     let sliders = {};
-    let boneAttachBtn, boneDropdown, boneList;
+    let boneAttachBtn, boneList;
 
     // --- UI Injection ---
     function injectUI() {
@@ -56,7 +56,6 @@
             }
             #tf-bone-attach-section {
                 margin-bottom: 20px;
-                position: relative;
             }
             #tf-bone-attach-btn {
                 width: 100%;
@@ -73,40 +72,41 @@
              #tf-bone-attach-btn:hover {
                 background: rgba(255,255,255,0.15);
              }
-            #tf-bone-dropdown {
-                display: none;
-                position: absolute;
-                bottom: calc(100% + 4px);
-                left: 0;
-                right: 0;
-                max-height: 25vh;
-                overflow-y: auto;
-                background: #1c2026;
+            /* --- NEW: Bone Modal Styles --- */
+            .tf-bone-modal-content {
+                width: min(400px, 90vw); padding: 20px;
+                background: rgba(28, 32, 38, 0.95); border-radius: 12px;
                 border: 1px solid rgba(255,255,255,0.1);
-                border-radius: 8px;
-                z-index: 10;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+                display: flex; flex-direction: column; gap: 15px;
             }
-            #tf-bone-dropdown.show { display: block; }
+            .tf-bone-modal-content .title {
+                font-size: 18px; font-weight: 600; text-align: center;
+                padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .tf-bone-modal-list-container {
+                max-height: 50vh;
+                overflow-y: auto;
+            }
             .tf-bone-item {
-                padding: 10px;
+                padding: 10px 12px;
                 color: #e6eef6;
                 cursor: pointer;
                 font-size: 14px;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
+                border-bottom: 1px solid rgba(255,255,255,0.08);
             }
             .tf-bone-item:last-child { border-bottom: none; }
-            .tf-bone-item:hover { background: rgba(255,255,255,0.2); }
+            .tf-bone-item:hover { background: rgba(255,255,255,0.1); }
         `;
         document.head.appendChild(style);
 
+        // Main transform panel UI
         panel = document.createElement('div');
         panel.id = 'tf-transform-panel';
         panel.innerHTML = `
             <div id="tf-bone-attach-section" style="display: none;">
                 <button id="tf-bone-attach-btn">Attach to Bone...</button>
-                <div id="tf-bone-dropdown"><div id="tf-bone-list"></div></div>
             </div>
-
             <div class="tf-slider-group">
                 <label for="pos-x">Position X</label>
                 <input type="range" id="pos-x" min="-5" max="5" value="0" step="0.01">
@@ -129,6 +129,19 @@
             </div>
         `;
         document.getElementById('app')?.appendChild(panel);
+
+        // New Bone Selection Modal UI
+        boneModal = document.createElement('div');
+        boneModal.className = 'tf-modal-overlay'; // Reuse existing overlay style
+        boneModal.innerHTML = `
+            <div class="tf-bone-modal-content">
+                <div class="title">Select a Bone</div>
+                <div class="tf-bone-modal-list-container">
+                    <div id="tf-bone-list"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(boneModal);
         
         sliders.pos_x = panel.querySelector('#pos-x');
         sliders.pos_y = panel.querySelector('#pos-y');
@@ -136,8 +149,11 @@
         sliders.rot_y = panel.querySelector('#rot-y');
         sliders.rot_x = panel.querySelector('#rot-x');
         boneAttachBtn = panel.querySelector('#tf-bone-attach-btn');
-        boneDropdown = panel.querySelector('#tf-bone-dropdown');
-        boneList = panel.querySelector('#tf-bone-list');
+        boneList = boneModal.querySelector('#tf-bone-list');
+    }
+
+    function showBoneModal(visible) {
+        boneModal.classList.toggle('show', visible);
     }
 
     // --- Logic ---
@@ -194,7 +210,7 @@
 
         if (boneName === 'detach') {
             window.Viewer.scene.attach(activeAsset.object);
-            syncSlidersToAsset(); // Update sliders to reflect new world transforms
+            syncSlidersToAsset();
             boneAttachBtn.textContent = 'Attach to Bone...';
             return;
         }
@@ -202,12 +218,10 @@
         const targetBone = mainModel.object.getObjectByName(boneName);
         if (targetBone) {
             targetBone.attach(activeAsset.object);
-            // Reset local transforms to snap the asset to the bone's origin
             activeAsset.object.position.set(0, 0, 0);
             activeAsset.object.rotation.set(0, 0, 0);
             activeAsset.object.scale.set(1, 1, 1);
-            
-            syncSlidersToAsset(); // Update sliders to new zeroed/one values
+            syncSlidersToAsset();
             boneAttachBtn.textContent = `Attached to: ${boneName}`;
         }
     }
@@ -218,7 +232,7 @@
     }
     
     function handleAssetLoaded(event) {
-        if (mainModel) return; // Main model already found
+        if (mainModel) return;
         const assetData = event.detail;
         assetData.object.traverse(obj => {
             if (obj.isSkinnedMesh) {
@@ -256,22 +270,21 @@
             });
         });
         
-        boneAttachBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            boneDropdown.classList.toggle('show');
+        boneAttachBtn.addEventListener('click', () => {
+            if (mainModel) showBoneModal(true);
         });
         
         boneList.addEventListener('click', (event) => {
             if (event.target.matches('.tf-bone-item')) {
                 const boneName = event.target.dataset.boneName;
                 attachAssetToBone(boneName);
+                showBoneModal(false);
             }
         });
 
-        // Close dropdown on outside click
-         window.addEventListener('click', () => {
-            if (boneDropdown.classList.contains('show')) {
-                boneDropdown.classList.remove('show');
+        boneModal.addEventListener('click', (event) => {
+            if (event.target === boneModal) {
+                 showBoneModal(false);
             }
         });
     }
@@ -282,8 +295,6 @@
         injectUI();
         wireEvents();
         window.Transform = {};
-
-        // "Transform" is the default active nav tab, so show this panel on load.
         panel.classList.add('show');
         window.Debug?.log('Transform Panel ready.');
     }
