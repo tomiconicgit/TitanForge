@@ -153,6 +153,15 @@
 
     function showBoneModal(visible) { boneModal.classList.toggle('show', visible); }
 
+    // **NEW**: Function to reset the panel to its default state
+    function resetPanel() {
+        activeAsset = null;
+        waitingMessage.style.display = 'block';
+        controlsContainer.style.display = 'none';
+        panel.style.justifyContent = 'center';
+        panel.style.alignItems = 'center';
+    }
+
     function syncSlidersToAsset() {
         if (!activeAsset || !activeAsset.object) return;
         const obj = activeAsset.object;
@@ -164,8 +173,10 @@
     }
 
     function updatePanelForAsset() {
+        if (!activeAsset) return;
         const boneSection = panel.querySelector('#tf-bone-attach-section');
-        const showBoneAttach = !!activeAsset && !!mainModel && activeAsset.id !== mainModel.id;
+        // **FIX**: Show attach button only if the active asset is NOT a main model
+        const showBoneAttach = !!mainModel && !activeAsset.isMainModel;
         boneSection.style.display = showBoneAttach ? 'block' : 'none';
         
         if (showBoneAttach && activeAsset.object.parent?.isBone) {
@@ -178,8 +189,9 @@
     }
     
     function populateBoneList() {
-        if (!mainModel) return;
         boneList.innerHTML = '';
+        if (!mainModel) return;
+
         const bones = [];
         mainModel.object.traverse(obj => { if (obj.isBone) bones.push(obj); });
 
@@ -219,33 +231,49 @@
     function handleNavChange(event) { panel.classList.toggle('show', event.detail.tab === 'transform'); }
     
     function handleAssetLoaded(event) {
-        if (mainModel) return;
         const assetData = event.detail;
-        assetData.object.traverse(obj => {
-            if (obj.isSkinnedMesh) {
-                mainModel = assetData;
-                window.Debug?.log(`Main model designated: ${mainModel.name}`);
-                populateBoneList();
-                return;
-            }
-        });
+        // **FIX**: Designate the main model based on the new flag
+        if (assetData.isMainModel) {
+            mainModel = assetData;
+            window.Debug?.log(`Main model designated: ${mainModel.name}`);
+            populateBoneList();
+        }
     }
 
     function handleAssetActivated(event) {
+        const assetData = event.detail;
+
+        // **FIX**: If event detail is null, reset the panel
+        if (!assetData) {
+            resetPanel();
+            return;
+        }
+
+        // Show controls if they were hidden
         if (waitingMessage.style.display !== 'none') {
             waitingMessage.style.display = 'none';
             controlsContainer.style.display = 'block';
             panel.style.justifyContent = 'flex-start';
             panel.style.alignItems = 'stretch';
         }
-        activeAsset = event.detail;
+        activeAsset = assetData;
         updatePanelForAsset();
+    }
+    
+    // **NEW**: Handle cleaning of assets to clear mainModel if needed
+    function handleAssetCleaned(event) {
+        if (mainModel && mainModel.id === event.detail.id) {
+            mainModel = null;
+            populateBoneList(); // Clear the bone list in the modal
+            window.Debug?.log('Main model was cleaned.');
+        }
     }
 
     function wireEvents() {
         Navigation.on('change', handleNavChange);
         App.on('asset:loaded', handleAssetLoaded);
         App.on('asset:activated', handleAssetActivated);
+        App.on('asset:cleaned', handleAssetCleaned); // **NEW**
 
         const applyTransforms = {
             pos_x: val => activeAsset.object.position.x = val,
