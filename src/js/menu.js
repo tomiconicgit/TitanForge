@@ -1,5 +1,4 @@
 // src/js/menu.js - Main expanding menu for the viewer
-
 (function () {
     'use strict';
 
@@ -114,7 +113,7 @@
             <div id="tf-menu-card">
                 <button data-action="load">Load</button>
                 <button data-action="toggles">Toggles</button>
-                <button data-action="save">Save</button>
+                <button data-action="copy">Copy Data</button> 
             </div>
         `;
         document.getElementById('app')?.appendChild(menuContainer);
@@ -140,18 +139,14 @@
         const menuButton = menuContainer.querySelector('#tf-menu-button');
         const menuCard = menuContainer.querySelector('#tf-menu-card');
         
-        // Open the menu when the button is clicked
         menuButton.addEventListener('click', (event) => {
-            event.stopPropagation(); // Prevent this click from being caught by the window listener immediately
+            event.stopPropagation();
             toggleMenu(true);
         });
         
-        // **FIX STARTS HERE**
-        // Prevent clicks inside the menu from closing it via the window listener.
         menuCard.addEventListener('pointerdown', (event) => {
             event.stopPropagation();
         });
-        // **FIX ENDS HERE**
 
         // Handle actions within the card
         menuCard.addEventListener('click', (event) => {
@@ -160,16 +155,15 @@
 
             toggleMenu(false); // Always close the menu after an action.
             
-            // Use a timeout to allow the close animation to start before firing the action
             setTimeout(() => {
                 if (action === 'load') {
                     showLoadModal(true);
                 } else if (action === 'toggles') {
                     window.Toggles?.show();
-                } else if (action === 'save') {
-                    console.log('Save action triggered.');
+                } else if (action === 'copy') {
+                    window.Copy?.show(); // <-- ADDED: Trigger the copy modal
                 }
-            }, 300); // Duration should match the CSS transition
+            }, 300);
         });
 
         loadModal.addEventListener('click', (event) => {
@@ -185,7 +179,6 @@
             }
         });
 
-        // Close the menu if the user clicks anywhere outside of it
         window.addEventListener('pointerdown', () => {
             if (menuContainer.classList.contains('open')) {
                 toggleMenu(false);
