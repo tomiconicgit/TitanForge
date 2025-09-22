@@ -12,15 +12,15 @@
         style.textContent = `
             #tf-rig-toggle {
                 position: fixed;
-                /* --- FINAL POSITIONING & SIZING --- */
-                bottom: 383px;
+                /* --- FINAL POSITIONING --- */
+                bottom: 374px;
                 left: 16px;
-                padding: 6px 10px;
                 z-index: 20;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
+                padding: 6px 10px;
                 border-radius: 16px;
                 background: rgba(28, 32, 38, 0.9);
                 border: 1px solid rgba(255,255,255,0.1);
@@ -29,7 +29,7 @@
             #tf-rig-toggle label {
                 color: #a0a7b0;
                 /* --- FINAL FONT SIZING --- */
-                font-size: 16px;
+                font-size: 12px;
                 font-weight: 500;
                 cursor: pointer;
             }
