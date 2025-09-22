@@ -100,9 +100,10 @@
 
         await this.runStages();
 
-        // **NEW**: Load primary UI modules from the director
+        // Load primary UI modules from the director
         await this.import('viewer', './js/viewer.js');
-        await this.import('navigation', '../navigation.js');
+        // **FIXED PATH BELOW**
+        await this.import('navigation', './js/navigation.js');
 
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
