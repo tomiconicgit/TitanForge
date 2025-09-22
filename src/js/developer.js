@@ -4,7 +4,6 @@
     'use strict';
 
     let panel, devButton, targetElement, copyButton, outputPre;
-    // NEW: Add references for width and height sliders
     let widthSlider, heightSlider;
     let bottomSlider, leftSlider;
     let widthValue, heightValue, bottomValue, leftValue;
@@ -12,7 +11,7 @@
     const elementsToControl = {
         '-- Select Element --': null,
         'Rig Toggle': '#tf-rig-toggle',
-        'Menu Button': '#tf-menu-button'
+        'Menu Button': '#tf-menu-container'
     };
 
     // --- UI Injection ---
@@ -26,11 +25,23 @@
                 box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;
             }
             #tf-dev-panel {
-                position: fixed; left:0; right:0; bottom:0; height: 50vh;
-                background: rgba(30,30,35,0.95); backdrop-filter: blur(10px);
-                border-top: 1px solid rgba(255,255,255,0.1); z-index: 999;
-                display: none; flex-direction: column; padding: 10px 20px; gap: 10px;
-                color: #fff; font-family: sans-serif; overflow-y: auto;
+                position: fixed;
+                /* --- CORRECTED POSITIONING --- */
+                top: calc(50vh + 54px); /* 54px is the height of the nav bar */
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: rgba(30,30,35,0.95);
+                backdrop-filter: blur(10px);
+                border-top: 1px solid rgba(255,255,255,0.1);
+                z-index: 999;
+                display: none;
+                flex-direction: column;
+                padding: 10px 20px;
+                gap: 10px;
+                color: #fff;
+                font-family: sans-serif;
+                overflow-y: auto;
             }
             #tf-dev-panel.show { display: flex; }
             #tf-dev-panel .dev-header { display: flex; justify-content: space-between; align-items: center; }
@@ -56,7 +67,6 @@
         const selectOptions = Object.keys(elementsToControl)
             .map(name => `<option value="${elementsToControl[name]}">${name}</option>`).join('');
 
-        // **NEW**: Added width and height sliders to innerHTML
         panel.innerHTML = `
             <div class="dev-header">
                 <h3>UI Positioner</h3>
@@ -107,13 +117,11 @@
         targetElement = document.querySelector(selector);
         if (targetElement) {
             const style = window.getComputedStyle(targetElement);
-            // **NEW**: Read width and height
             const width = parseInt(style.width, 10);
             const height = parseInt(style.height, 10);
             const bottom = parseInt(style.bottom, 10);
             const left = parseInt(style.left, 10);
             
-            // **NEW**: Update width and height sliders
             widthSlider.value = width;
             heightSlider.value = height;
             bottomSlider.value = bottom;
@@ -130,7 +138,6 @@
     function applyStyles() {
         if (!targetElement) return;
 
-        // **NEW**: Read and apply width/height
         const width = `${widthSlider.value}px`;
         const height = `${heightSlider.value}px`;
         const bottom = `${bottomSlider.value}px`;
@@ -146,7 +153,6 @@
         targetElement.style.right = 'auto';
         targetElement.style.transform = 'none';
 
-        // **NEW**: Update text values
         widthValue.textContent = width;
         heightValue.textContent = height;
         bottomValue.textContent = bottom;
@@ -159,7 +165,6 @@
             outputPre.textContent = 'Select an element to position.';
             return;
         }
-        // **NEW**: Add width and height to output
         outputPre.textContent = `bottom: ${bottomSlider.value}px;\nleft: ${leftSlider.value}px;\nwidth: ${widthSlider.value}px;\nheight: ${heightSlider.value}px;`;
     }
 
@@ -169,7 +174,6 @@
         panel.querySelector('.dev-close').addEventListener('click', () => panel.classList.remove('show'));
         panel.querySelector('#dev-element-select').addEventListener('change', (e) => updateTargetElement(e.target.value));
         
-        // **NEW**: Add listeners for new sliders
         widthSlider.addEventListener('input', applyStyles);
         heightSlider.addEventListener('input', applyStyles);
         bottomSlider.addEventListener('input', applyStyles);
