@@ -102,8 +102,8 @@
 
         // Load primary UI modules from the director
         await this.import('viewer', './js/viewer.js');
-        // **FIXED PATH BELOW**
         await this.import('navigation', './js/navigation.js');
+        await this.import('menu', './js/menu.js'); // **NEW**
 
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
