@@ -68,7 +68,7 @@
                 pointer-events: auto;
             }
             
-            /* Styles for buttons inside the card (largely unchanged) */
+            /* Styles for buttons inside the card */
             #tf-menu-card button, .tf-load-modal-content button {
                 width: 100%;
                 padding: 10px 12px;
@@ -97,7 +97,7 @@
                 background-color: transparent;
             }
 
-            /* Modal styles (unchanged) */
+            /* Modal styles */
             .tf-load-modal-content {
                 display: flex; flex-direction: column; gap: 15px;
                 width: min(300px, 80vw);
