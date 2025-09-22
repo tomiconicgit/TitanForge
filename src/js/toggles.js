@@ -141,6 +141,13 @@
             event.stopPropagation();
             togglePanel(!panel.classList.contains('show'));
         });
+        
+        // --- FIX ---
+        // Prevent clicks inside the panel from closing it.
+        panel.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+        // --- END FIX ---
 
         // Close panel on outside click
         window.addEventListener('click', () => {
