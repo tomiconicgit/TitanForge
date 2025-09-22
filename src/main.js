@@ -22,10 +22,7 @@
       baseURL: new URL('.', location.href).href
     },
 
-    // ---- Stage pipeline -----------------------------------------------------
-    addStage(id, label, fn, { optional = false } = {}) {
-      this.stages.push({ id, label, fn, optional });
-    },
+    addStage(id, label, fn, { optional = false } = {}) { this.stages.push({ id, label, fn, optional }); },
 
     async runStages() {
       for (const s of this.stages) {
@@ -46,11 +43,9 @@
       }
     },
 
-    // ---- Event bus helpers --------------------------------------------------
     on(type, fn) { this.bus.addEventListener(type, fn); return () => this.bus.removeEventListener(type, fn); },
     emit(type, detail) { this.bus.dispatchEvent(new CustomEvent(type, { detail })); },
 
-    // ---- Safe dynamic import for later modules ------------------------------
     async import(id, path, { optional = false } = {}) {
       Task.start(`mod:${id}`, `Loading module: ${id}`);
       try {
@@ -64,11 +59,9 @@
       }
     },
 
-    // ---- Boot ---------------------------------------------------------------
     async start() {
       if (this._started) { Task.log('Director already started; ignoring.'); return; }
       this._started = true;
-
       Task.start('director', 'Director starting');
 
       try {
@@ -77,10 +70,9 @@
 
         this.addStage('probe:webgl', 'Probing WebGL capability', async () => {
           const canvas = document.createElement('canvas');
-          const gl2 = canvas.getContext('webgl2');
-          const gl  = gl2 || canvas.getContext('webgl');
+          const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
           if (!gl) throw new Error('WebGL not available');
-          this.glVersion = gl2 ? 'webgl2' : 'webgl1';
+          this.glVersion = gl instanceof WebGL2RenderingContext ? 'webgl2' : 'webgl1';
           Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} • ${this.glVersion}`);
         });
 
@@ -97,7 +89,6 @@
 
         await this.runStages();
 
-        // **UPDATED**: Load all primary UI and logic modules
         await this.import('viewer', './js/viewer.js');
         await this.import('navigation', './js/navigation.js');
         await this.import('menu', './js/menu.js');
@@ -111,7 +102,6 @@
         await this.import('transform', './js/transform.js');
         await this.import('developer', './js/developer.js');
 
-
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
 
@@ -124,19 +114,11 @@
 
   window.App = App;
 
-  const kick = () => window.App.start();
-  window.addEventListener('app:launch', kick);
-  document.addEventListener('app:launch', kick);
-
-  if (!document.getElementById('tf-loader')) {
-    setTimeout(() => { if (!App._started) App.start(); }, 0);
-  }
-
+  // --- UPDATED: Start the app immediately on DOM readiness ---
   if (document.readyState !== 'loading') {
-    Task.log('Director loaded; waiting for app:launch (press Continue). You can also call App.start() manually.');
+      App.start();
   } else {
-    document.addEventListener('DOMContentLoaded', () => {
-      Task.log('Director ready; awaiting app:launch');
-    });
+      document.addEventListener('DOMContentLoaded', () => App.start());
   }
+
 })();
