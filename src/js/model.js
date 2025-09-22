@@ -133,7 +133,8 @@
                     vertices: vertexCount,
                     polygons: Math.floor(triangleCount),
                     fileSize: formatBytes(file.size),
-                    object: model
+                    object: model,
+                    isMainModel: true // **FIX**: Identify this as a main model
                 };
                 
                 // Notify other modules (like tabs.js) that a model has been added
