@@ -95,7 +95,8 @@
         await this.import('assetManager', './js/asset.js');
         await this.import('tabs', './js/tabs.js');
         await this.import('cleaner', './js/cleaner.js');
-        await this.import('copy', './js/copy.js'); // <-- ADDED MODULE
+        await this.import('copy', './js/copy.js');
+        await this.import('animation', './js/animation.js'); // <-- ADDED MODULE
         await this.import('rig', './js/rig.js');
         await this.import('hide', './js/hide.js');
         await this.import('toggles', './js/toggles.js');
