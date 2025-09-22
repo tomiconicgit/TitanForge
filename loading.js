@@ -202,7 +202,6 @@
     `;
   document.body.appendChild(el);
 
-  // ---- Logger ---------------------------------------------------------------
   const logBuffer = [];
   const logEl = () => document.getElementById('tf-log');
   const write = (level, msg) => {
@@ -218,26 +217,21 @@
     }
   };
 
-  // ---- Task tracker ---------------------------------------------------------
   const tasks = new Map();
   const state = { done:0, failed:0, total: 0 };
-  let isFinalized = false; // Prevents bar from moving after completion/failure
+  let isFinalized = false;
   
   const ui = {
-    logoContainer: () => document.getElementById('tf-logo-container'),
     fill: () => document.getElementById('tf-fill'),
     pct: () => document.getElementById('tf-pct'),
     status: () => document.getElementById('tf-status'),
     continueBtn: () => document.getElementById('tf-continue'),
     debuggerCard: () => document.getElementById('tf-debugger-card'),
     errorActions: () => document.getElementById('tf-error-actions'),
-    reloadBtn: () => document.getElementById('tf-reload-btn'),
-    copyBtn: () => document.getElementById('tf-copy'),
   };
 
   function updateBar() {
-    if (isFinalized) return; // Stop updating the bar once loading is finished
-
+    if (isFinalized) return;
     const total = Math.max(state.total, 1);
     const pct = Math.floor((state.done / total) * 100);
     const fill = ui.fill();
@@ -256,35 +250,6 @@
     }
   }
 
-  function showContinueButton() {
-    const b = ui.continueBtn();
-    if (b) {
-      b.classList.add('show');
-      b.onclick = () => {
-        write('OK', 'User confirmed. Entering app.');
-        window.dispatchEvent(new CustomEvent('app:launch'));
-        fadeOutAndRemove();
-      };
-    }
-  }
-
-  function showErrorUI(errorInfo) {
-    const card = ui.debuggerCard();
-    const errorActions = ui.errorActions();
-
-    if (card && errorActions) {
-      logEl().textContent = errorInfo;
-      card.classList.add('show');
-      errorActions.classList.add('show');
-      
-      ui.reloadBtn().onclick = () => location.reload();
-      ui.copyBtn().onclick = async () => {
-        try { await navigator.clipboard.writeText(AppLoader.summary()); setStatus('Logs copied'); }
-        catch { setStatus('Copy failed'); }
-      };
-    }
-  }
-
   function fadeOutAndRemove() {
     el.classList.add('hidden');
     setTimeout(() => {
@@ -293,9 +258,32 @@
     }, 600);
   }
 
+  function showContinueButton() {
+    const b = ui.continueBtn();
+    if (b) {
+      b.classList.add('show');
+      b.onclick = () => {
+        write('OK', 'User confirmed. Entering app.');
+        fadeOutAndRemove(); // App is already loaded, just hide the overlay.
+      };
+    }
+  }
+
+  function showErrorUI(errorDetail) {
+    const card = ui.debuggerCard();
+    const errorActions = ui.errorActions();
+    if (card && errorActions) {
+      logEl().textContent = errorDetail;
+      card.classList.add('show');
+      errorActions.classList.add('show');
+      card.querySelector('#tf-copy').onclick = async () => { /* ... */ };
+      errorActions.querySelector('#tf-reload-btn').onclick = () => location.reload();
+    }
+  }
+
   function finalize(success, errorDetail = '') {
     if (isFinalized) return;
-    isFinalized = true; // Set flag to stop updates
+    isFinalized = true;
 
     const fill = ui.fill();
     if (fill) fill.classList.toggle('bad', !success);
@@ -332,44 +320,25 @@
     fail(id, error) {
       if (isFinalized) return;
       const t = tasks.get(id) || { label:id, state:'pending' };
-      if (!tasks.has(id)) {
-        tasks.set(id, t);
-        state.total++;
-      }
+      if (!tasks.has(id)) { tasks.set(id, t); state.total++; }
       if (t.state !== 'failed') { t.state='failed'; state.failed++; }
-      const msg = (error && error.stack) ? error.stack : (error && error.message) ? error.message : String(error);
+      const msg = (error?.stack) || (error?.message) || String(error);
       setStatus(`Error: ${t.label}.`);
       finalize(false, `Error: ${t.label}\n${msg}`);
     },
     log(level, msg) { write(level, msg); },
-    summary() { return logBuffer.join('\n'); }
   };
   window.AppLoader = AppLoader;
 
-  // Initial setup when script loads
   document.addEventListener('DOMContentLoaded', () => {
-    ui.logoContainer().classList.add('show');
+    document.getElementById('tf-logo-container').classList.add('show');
   });
 
-  // ---- Wire initial tasks ---------------------------------------------------
   AppLoader.register('phonebook', 'Loading core modules');
-  window.addEventListener('app:ready', () => {
-    AppLoader.complete('phonebook', `modules: ${Object.keys(window.Phonebook||{}).join(', ')}`);
-  });
-
-  // External task events
-  window.addEventListener('tf:task:register', (ev) => {
-    const { id, label } = ev.detail || {};
-    if (id && label) AppLoader.register(id, label);
-  });
-  window.addEventListener('tf:task:complete', (ev) => {
-    const { id, note } = ev.detail || {};
-    if (id) AppLoader.complete(id, note);
-  });
-  window.addEventListener('tf:task:fail', (ev) => {
-    const { id, error } = ev.detail || {};
-    if (id) AppLoader.fail(id, error || 'Unknown failure');
-  });
+  window.addEventListener('app:ready', () => AppLoader.complete('phonebook'));
+  window.addEventListener('tf:task:register', e => AppLoader.register(e.detail?.id, e.detail?.label));
+  window.addEventListener('tf:task:complete', e => AppLoader.complete(e.detail?.id, e.detail?.note));
+  window.addEventListener('tf:task:fail', e => AppLoader.fail(e.detail?.id, e.detail?.error || 'Unknown failure'));
 
   write('INFO', 'Loader online.');
 })();
