@@ -128,27 +128,27 @@
     function showLoadModal(show) { loadModal.classList.toggle('show', show); }
 
     function wireEvents() {
-        // --- REVISED EVENT LOGIC ---
-        
-        // Handles opening the menu, or closing it by clicking its background
-        menuContainer.addEventListener('click', (event) => {
-            if (event.target.closest('.tf-menu-options')) {
-                return; // Clicks on options are handled by the listener below
+        // Use pointerdown for primary interaction to be more robust on touch devices.
+        menuContainer.addEventListener('pointerdown', (event) => {
+            event.stopPropagation(); // Stop this event from reaching the window listener.
+            
+            // Only toggle if the click is on the button itself or the card's background.
+            // Clicks on the option buttons are handled by their own 'click' listener.
+            if (!event.target.closest('.tf-menu-options')) {
+                toggleMenu(!menuContainer.classList.contains('open'));
             }
-            toggleMenu(!menuContainer.classList.contains('open'));
         });
 
-        // Handles actions within the menu
+        // Use 'click' for the option buttons as these are clear user actions.
         const options = menuContainer.querySelector('.tf-menu-options');
         options.addEventListener('click', (event) => {
-            event.stopPropagation(); // Prevents the container's listener from firing
             const action = event.target.dataset.action;
             if (!action) return;
 
             toggleMenu(false); // Always close menu after an action
             
             if (action === 'load') {
-                setTimeout(() => showLoadModal(true), 400); // Wait for menu to close
+                setTimeout(() => showLoadModal(true), 400);
             } else if (action === 'toggles') {
                 window.Toggles?.show();
             } else if (action === 'save') {
@@ -156,7 +156,6 @@
             }
         });
 
-        // Handles the "Load Model/Asset" modal
         loadModal.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (action === 'load-model') {
@@ -165,14 +164,14 @@
             } else if (action === 'load-asset') {
                 showLoadModal(false);
                 window.AssetManager?.load();
-            } else if (event.target === loadModal) { // Click on overlay
+            } else if (event.target === loadModal) {
                 showLoadModal(false);
             }
         });
 
-        // Handles closing the menu by clicking anywhere else on the page
-        window.addEventListener('click', (event) => {
-            if (menuContainer.classList.contains('open') && !menuContainer.contains(event.target)) {
+        // This listener will now catch any pointerdown that wasn't stopped by the menu itself.
+        window.addEventListener('pointerdown', () => {
+            if (menuContainer.classList.contains('open')) {
                 toggleMenu(false);
             }
         });
