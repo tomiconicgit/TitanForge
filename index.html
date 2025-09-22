@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <title>Wardrobe Tool — Rebuild (Shell)</title>
 
-  <!-- PWA manifest (tiny, data-URI) -->
   <link rel="manifest" href='data:application/manifest+json,{
     "name":"Wardrobe & Equipment — Rebuild",
     "short_name":"Wardrobe2",
@@ -18,7 +17,6 @@
     ]
   }' />
 
-  <!-- iOS PWA niceties -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Wardrobe2" />
@@ -39,9 +37,80 @@
       background:rgba(255,255,255,.06); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
       padding:6px 10px; border-radius:10px;
     }
+
+    /* 3D Box Loading Indicator Styles */
+    #tf-global-loader {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7); /* Semi-transparent overlay */
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998; /* Below tf-loader, above app content */
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    #tf-global-loader.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .cube-container {
+      width: 80px;
+      height: 80px;
+      perspective: 600px; /* For 3D effect */
+    }
+
+    .cube {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      animation: cubeRotate 10s infinite linear; /* Slower, continuous rotation */
+    }
+
+    .face {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      background: rgba(40, 40, 45, 0.8); /* Dark metallic look */
+      border: 1px solid rgba(100, 100, 100, 0.3); /* Subtle border */
+      box-shadow: 0 0 15px rgba(0, 200, 255, 0.5), inset 0 0 8px rgba(0, 200, 255, 0.3); /* Neon blue glow */
+      transition: transform 0.5s ease-in-out; /* For separation animation */
+    }
+
+    /* Initial separation / rotation of faces */
+    .face:nth-child(1) { transform: rotateY(0deg) translateZ(40px); } /* Front */
+    .face:nth-child(2) { transform: rotateY(90deg) translateZ(40px); } /* Right */
+    .face:nth-child(3) { transform: rotateY(180deg) translateZ(40px); } /* Back */
+    .face:nth-child(4) { transform: rotateY(-90deg) translateZ(40px); } /* Left */
+    .face:nth-child(5) { transform: rotateX(90deg) translateZ(40px); } /* Top */
+    .face:nth-child(6) { transform: rotateX(-90deg) translateZ(40px); } /* Bottom */
+
+    /* Animation for the cube itself */
+    @keyframes cubeRotate {
+      0% { transform: rotateX(0deg) rotateY(0deg); }
+      100% { transform: rotateX(360deg) rotateY(360deg); }
+    }
+
+    /* Optional: Breathing/pulsing effect for faces */
+    @keyframes facePulse {
+      0%, 100% { transform: translateZ(40px); }
+      50% { transform: translateZ(50px); } /* Slightly larger separation */
+    }
+    /* Apply a different animation for each face to make it look less uniform */
+    .face:nth-child(1) { animation: facePulse 6s infinite ease-in-out 0s; }
+    .face:nth-child(2) { animation: facePulse 6s infinite ease-in-out 1s; }
+    .face:nth-child(3) { animation: facePulse 6s infinite ease-in-out 2s; }
+    .face:nth-child(4) { animation: facePulse 6s infinite ease-in-out 3s; }
+    .face:nth-child(5) { animation: facePulse 6s infinite ease-in-out 4s; }
+    .face:nth-child(6) { animation: facePulse 6s infinite ease-in-out 5s; }
+
   </style>
 
-  <!-- PHONEBOOK: import map for Three + addons (pinned to 0.157.0) -->
   <script type="importmap">
   {
     "imports": {
@@ -52,14 +121,25 @@
   </script>
 </head>
 <body>
+  <div id="tf-global-loader">
+    <div class="cube-container">
+      <div class="cube">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="app" role="application" aria-label="Wardrobe Tool v2"></div>
   <div id="status">shell ready</div>
 
-  <!-- Global debugger + loader UI -->
   <script src="./debugger.js"></script>
   <script type="module" src="./loading.js"></script>
 
-  <!-- ENTRY POINT: wires the phonebook and notifies the loader -->
   <script type="module">
     // mark entry task (visible in the loader)
     if (window.Debug && Debug.task) Debug.task.start('entry', 'Bootstrapping entry');
@@ -84,7 +164,6 @@
     if (window.Debug && Debug.task) Debug.task.done('entry', 'Entry OK');
   </script>
 
-  <!-- Director -->
   <script type="module" src="./src/main.js"></script>
   <script type="module" src="./src/js/viewer.js"></script>
 </body>
