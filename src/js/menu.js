@@ -88,37 +88,37 @@
         `;
         document.getElementById('app')?.appendChild(menuContainer);
         
-        // Assign elements after they are in the DOM
         menuButton = document.getElementById('tf-menu-button');
         dropdown = menuContainer.querySelector('.tf-menu-dropdown');
     }
 
     function toggleMenu(show) {
-        if (show) {
-            dropdown.classList.add('show');
-        } else {
-            dropdown.classList.remove('show');
-        }
+        dropdown.classList.toggle('show', show);
     }
 
     function wireEvents() {
         menuButton.addEventListener('click', (event) => {
-            event.stopPropagation(); // Prevent the window listener from closing it immediately
+            event.stopPropagation();
             toggleMenu(!dropdown.classList.contains('show'));
         });
 
-        // Close dropdown if user clicks an item
         dropdown.addEventListener('click', (event) => {
             const target = event.target;
             if (target.matches('.tf-menu-item')) {
                 const action = target.dataset.action;
-                bus.dispatchEvent(new CustomEvent('action', { detail: { action } }));
-                console.log(`Menu action: ${action}`);
+                
+                // **UPDATED LOGIC HERE**
+                if (action === 'load-model') {
+                    window.ModelManager?.load();
+                } else {
+                    bus.dispatchEvent(new CustomEvent('action', { detail: { action } }));
+                    console.log(`Menu action: ${action}`);
+                }
+
                 toggleMenu(false);
             }
         });
 
-        // Close dropdown if user clicks anywhere else
         window.addEventListener('click', () => {
             if (dropdown.classList.contains('show')) {
                 toggleMenu(false);
