@@ -3,15 +3,14 @@
 (function () {
     'use strict';
 
-    let panel, devButton, targetElement, copyButton, outputPre;
-    let widthSlider, heightSlider, bottomSlider, leftSlider, fontSizeSlider, paddingXSlider, paddingYSlider;
-    let widthValue, heightValue, bottomValue, leftValue, fontSizeValue, paddingXValue, paddingYValue;
+    let panel, devButton, targetElement, targetIsContainer, copyButton, outputPre;
+    let bottomSlider, leftSlider, fontSizeSlider, paddingXSlider, paddingYSlider;
+    let bottomValue, leftValue, fontSizeValue, paddingXValue, paddingYValue;
 
     const elementsToControl = {
         '-- Select Element --': null,
         'Rig Toggle': '#tf-rig-toggle',
-        // **FIXED**: Target the button directly, not its container
-        'Menu Button': '#tf-menu-button'
+        'Menu Button': '#tf-menu-container' // We target the container for position
     };
 
     function injectUI() {
@@ -54,7 +53,7 @@
         const selectOptions = Object.keys(elementsToControl)
             .map(name => `<option value="${elementsToControl[name]}">${name}</option>`).join('');
 
-        // **NEW**: Added sliders for font-size and padding
+        // **UPDATED**: Renamed sliders
         panel.innerHTML = `
             <div class="dev-header">
                 <h3>UI Positioner</h3>
@@ -74,11 +73,11 @@
                 <input type="range" id="dev-slider-padding-x" min="0" max="50" value="20">
             </div>
              <div class="slider-group">
-                <label>Bottom: <span id="dev-val-bottom">0px</span></label>
+                <label>Y Position (from bottom): <span id="dev-val-bottom">0px</span></label>
                 <input type="range" id="dev-slider-bottom" min="0" max="1000" value="0">
             </div>
             <div class="slider-group">
-                <label>Left: <span id="dev-val-left">0px</span></label>
+                <label>X Position (from left): <span id="dev-val-left">0px</span></label>
                 <input type="range" id="dev-slider-left" min="0" max="1000" value="0">
             </div>
             <pre id="dev-output-css">Select an element to position.</pre>
@@ -86,7 +85,6 @@
         `;
         document.getElementById('app')?.appendChild(panel);
 
-        // Assign all element references
         copyButton = panel.querySelector('#dev-copy-css');
         outputPre = panel.querySelector('#dev-output-css');
         fontSizeSlider = panel.querySelector('#dev-slider-font-size');
@@ -101,57 +99,69 @@
         leftValue = panel.querySelector('#dev-val-left');
     }
 
-    // --- Core Logic ---
+    function getStyleTarget(mainTarget) {
+        // **FIXED**: Logic to get the correct element for STYLING vs POSITIONING
+        // For the Menu, we position the container but style the button inside.
+        if (mainTarget && mainTarget.id === 'tf-menu-container') {
+            return mainTarget.querySelector('#tf-menu-button');
+        }
+        // For the Rig Toggle, the container and the text are the same element.
+        if (mainTarget && mainTarget.id === 'tf-rig-toggle') {
+            return mainTarget.querySelector('label:first-child');
+        }
+        return mainTarget;
+    }
+
     function updateTargetElement(selector) {
+        targetIsContainer = false;
         if (!selector || selector === 'null') {
             targetElement = null;
             updateCopyOutput();
             return;
         }
         targetElement = document.querySelector(selector);
+        
         if (targetElement) {
-            const style = window.getComputedStyle(targetElement);
+            const styleTarget = getStyleTarget(targetElement) || targetElement;
+            const posStyle = window.getComputedStyle(targetElement); // for position
+            const style = window.getComputedStyle(styleTarget);    // for style
+            
             const fontSize = parseInt(style.fontSize, 10);
             const paddingY = parseInt(style.paddingTop, 10);
             const paddingX = parseInt(style.paddingLeft, 10);
-            const bottom = parseInt(style.bottom, 10);
-            const left = parseInt(style.left, 10);
+            const bottom = parseInt(posStyle.bottom, 10);
+            const left = parseInt(posStyle.left, 10);
             
-            fontSizeSlider.value = fontSize;
-            paddingYSlider.value = paddingY;
-            paddingXSlider.value = paddingX;
-            bottomSlider.value = bottom;
-            leftSlider.value = left;
-
-            fontSizeValue.textContent = `${fontSize}px`;
-            paddingYValue.textContent = `${paddingY}px`;
-            paddingXValue.textContent = `${paddingX}px`;
-            bottomValue.textContent = `${bottom}px`;
-            leftValue.textContent = `${left}px`;
-            updateCopyOutput();
+            fontSizeSlider.value = isNaN(fontSize) ? 14 : fontSize;
+            paddingYSlider.value = isNaN(paddingY) ? 10 : paddingY;
+            paddingXSlider.value = isNaN(paddingX) ? 20 : paddingX;
+            bottomSlider.value = isNaN(bottom) ? 0 : bottom;
+            leftSlider.value = isNaN(left) ? 0 : left;
+            
+            applyStyles(); // Sync UI
         }
     }
 
     function applyStyles() {
         if (!targetElement) return;
 
+        const styleTarget = getStyleTarget(targetElement) || targetElement;
+
         const fontSize = `${fontSizeSlider.value}px`;
         const padding = `${paddingYSlider.value}px ${paddingXSlider.value}px`;
         const bottom = `${bottomSlider.value}px`;
         const left = `${leftSlider.value}px`;
 
-        targetElement.style.fontSize = fontSize;
-        targetElement.style.padding = padding;
+        // Apply styles to the appropriate element
+        styleTarget.style.fontSize = fontSize;
+        if(styleTarget.style.padding !== undefined) styleTarget.style.padding = padding;
+
         targetElement.style.bottom = bottom;
         targetElement.style.left = left;
-
-        // Ensure these are controlled, removing auto sizing
-        targetElement.style.width = 'auto';
-        targetElement.style.height = 'auto';
         targetElement.style.top = 'auto';
         targetElement.style.right = 'auto';
-        targetElement.style.transform = 'none';
-
+        
+        // Update text values
         fontSizeValue.textContent = fontSize;
         paddingYValue.textContent = `${paddingYSlider.value}px`;
         paddingXValue.textContent = `${paddingXSlider.value}px`;
@@ -165,16 +175,21 @@
             outputPre.textContent = 'Select an element to position.';
             return;
         }
-        outputPre.textContent = `bottom: ${bottomSlider.value}px;\nleft: ${leftSlider.value}px;\nfont-size: ${fontSizeSlider.value}px;\npadding: ${paddingYSlider.value}px ${paddingXSlider.value}px;`;
+        const styleTarget = getStyleTarget(targetElement) || targetElement;
+
+        let output = `/* For ${targetElement.id} */\n`;
+        output += `bottom: ${bottomSlider.value}px;\nleft: ${leftSlider.value}px;\n`;
+        output += `\n/* For ${styleTarget.id || 'inner element'} */\n`;
+        output += `font-size: ${fontSizeSlider.value}px;\npadding: ${paddingYSlider.value}px ${paddingXSlider.value}px;`;
+
+        outputPre.textContent = output;
     }
 
-    // --- Event Handlers ---
     function wireEvents() {
         devButton.addEventListener('click', () => panel.classList.toggle('show'));
         panel.querySelector('.dev-close').addEventListener('click', () => panel.classList.remove('show'));
         panel.querySelector('#dev-element-select').addEventListener('change', (e) => updateTargetElement(e.target.value));
         
-        // Add listeners for all sliders
         fontSizeSlider.addEventListener('input', applyStyles);
         paddingXSlider.addEventListener('input', applyStyles);
         paddingYSlider.addEventListener('input', applyStyles);
@@ -189,7 +204,6 @@
         });
     }
 
-    // --- Bootstrap ---
     function bootstrap() {
         if (window.Developer) return;
         injectUI();
