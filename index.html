@@ -41,7 +41,7 @@
     }
   </style>
 
-  <!-- PHONEBOOK: import map for Three + addons (pinned to 0.157.0 like the old app) -->
+  <!-- PHONEBOOK: import map for Three + addons (pinned to 0.157.0) -->
   <script type="importmap">
   {
     "imports": {
@@ -55,23 +55,33 @@
   <div id="app" role="application" aria-label="Wardrobe Tool v2"></div>
   <div id="status">shell ready</div>
 
-  <!-- ENTRY POINT: minimal bootstrap that only wires the phonebook and confirms load -->
+  <!-- Global debugger + loader UI -->
+  <script src="./debugger.js"></script>
+  <script type="module" src="./loading.js"></script>
+
+  <!-- ENTRY POINT: wires the phonebook and notifies the loader -->
   <script type="module">
+    // mark entry task (visible in the loader)
+    if (window.Debug && Debug.task) Debug.task.start('entry', 'Bootstrapping entry');
+
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { GLTFLoader }   from 'three/addons/loaders/GLTFLoader.js';
 
-    // Expose the phonebook for subsequent steps (keeps this file as the single source of truth).
+    // Expose the phonebook for subsequent modules
     window.Phonebook = { THREE, OrbitControls, GLTFLoader, version: '0.157.0' };
 
-    // Basic readiness signal (no scene yet; we’ll build features step-by-step).
-    const readyEvent = new CustomEvent('app:ready', { detail: { modules: Object.keys(window.Phonebook) }});
-    window.dispatchEvent(readyEvent);
+    // Signal to the loader that the phonebook is ready
+    window.dispatchEvent(new CustomEvent('app:ready', { detail: { modules: Object.keys(window.Phonebook) }}));
     console.log('[Wardrobe2] entry loaded:', window.Phonebook);
+    if (window.Debug) Debug.log('Phonebook ready: three@0.157.0, OrbitControls, GLTFLoader');
 
-    // Optional: tiny health check update for the footer badge.
-    const status = document.getElementById('status');
-    if (status) status.textContent = 'phonebook loaded • entry ok';
+    // Update footer badge
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.textContent = 'phonebook loaded • entry ok';
+
+    // complete entry task
+    if (window.Debug && Debug.task) Debug.task.done('entry', 'Entry OK');
   </script>
 </body>
 </html>
