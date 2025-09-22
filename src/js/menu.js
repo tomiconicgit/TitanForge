@@ -42,10 +42,11 @@
                 height: 100%;
                 font-size: 14px;
                 font-weight: 600;
-                transition: opacity 0.2s ease;
+                transition: opacity 0.2s ease, transform 0.2s ease;
             }
             #tf-menu-container.open #tf-menu-button-text {
                 opacity: 0;
+                transform: scale(0.9);
                 pointer-events: none;
             }
             .tf-menu-options {
@@ -56,12 +57,16 @@
                 flex-direction: column;
                 gap: 10px;
                 opacity: 0;
-                transition: opacity 0.3s ease 0.2s;
+                transform: scale(0.95);
+                transition: opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s;
+                pointer-events: none;
             }
             #tf-menu-container.open .tf-menu-options {
                 opacity: 1;
+                transform: scale(1);
+                pointer-events: auto;
             }
-            .tf-menu-options button {
+            .tf-menu-options button, .tf-load-modal-content button {
                 width: 100%;
                 padding: 12px;
                 font-size: 15px;
@@ -73,7 +78,7 @@
                 cursor: pointer;
                 transition: background-color 0.2s ease;
             }
-            .tf-menu-options button:hover {
+            .tf-menu-options button:hover, .tf-load-modal-content button:hover {
                 background-color: rgba(255, 255, 255, 0.2);
             }
             .tf-load-modal-content {
@@ -102,8 +107,8 @@
         loadModal.className = 'tf-modal-overlay';
         loadModal.innerHTML = `
             <div class="tf-load-modal-content">
-                <button class="tf-menu-options-button" data-action="load-model">Load Model</button>
-                <button class="tf-menu-options-button" data-action="load-asset">Load Asset</button>
+                <button data-action="load-model">Load Model</button>
+                <button data-action="load-asset">Load Asset</button>
             </div>
         `;
         document.body.appendChild(loadModal);
@@ -114,8 +119,9 @@
 
     function wireEvents() {
         menuContainer.addEventListener('click', (event) => {
-            if (event.target === menuContainer || event.target.id === 'tf-menu-button-text') {
-                toggleMenu(!menuContainer.classList.contains('open'));
+            if (!menuContainer.classList.contains('open')) {
+                event.stopPropagation();
+                toggleMenu(true);
             }
         });
 
@@ -124,10 +130,10 @@
             const action = event.target.dataset.action;
             if (!action) return;
 
-            toggleMenu(false); // Close menu on any action
+            toggleMenu(false);
             
             if (action === 'load') {
-                setTimeout(() => showLoadModal(true), 300); // Delay for animation
+                setTimeout(() => showLoadModal(true), 400);
             } else if (action === 'toggles') {
                 window.Toggles?.show();
             } else if (action === 'save') {
