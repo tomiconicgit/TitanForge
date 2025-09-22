@@ -13,18 +13,21 @@
         style.textContent = `
             #tf-rig-toggle {
                 position: fixed;
-                /* --- CORRECTED POSITIONING --- */
-                bottom: 50vh;
+                /* --- FINAL POSITIONING --- */
+                bottom: 383px;
                 left: 16px;
-                transform: translateY(-8px); /* Moves the toggle 8px above the nav bar */
+                width: 97px;
+                height: 20px;
                 z-index: 20;
                 display: flex;
                 align-items: center;
+                justify-content: space-between; /* To space out label and switch */
                 gap: 8px;
                 padding: 6px 10px;
                 border-radius: 16px;
                 background: rgba(28, 32, 38, 0.9);
                 border: 1px solid rgba(255,255,255,0.1);
+                box-sizing: border-box;
             }
             #tf-rig-toggle label {
                 color: #a0a7b0;
@@ -37,6 +40,7 @@
                 display: inline-block;
                 width: 30px;
                 height: 16px;
+                flex-shrink: 0; /* Prevent the switch from shrinking */
             }
             .tf-switch input { display: none; }
             .tf-slider {
