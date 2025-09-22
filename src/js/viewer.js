@@ -39,10 +39,18 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   }
 
   function initThree() {
-    // Scene with dark, cool tone (not black)
+    // Scene
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x101821); // deep blue-grey
-    scene.fog = new THREE.Fog(0x101821, 25, 120);
+
+    // NEW: Environment - A large sphere to act as a studio room
+    const roomGeo = new THREE.SphereGeometry(100, 64, 32);
+    const roomMat = new THREE.MeshStandardMaterial({
+      color: 0x08080a, // Very dark grey
+      side: THREE.BackSide,
+      metalness: 0.1
+    });
+    const room = new THREE.Mesh(roomGeo, roomMat);
+    scene.add(room);
 
     // Camera
     camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
@@ -69,7 +77,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     controls.minDistance = 1.2;
     controls.maxDistance = 12;
 
-    // Lighting — hemisphere + gentle three-point rig
+    // Lighting — hemisphere + gentle three-point rig (UNCHANGED)
     const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x1a2530, 0.8);
     scene.add(hemi);
 
@@ -88,21 +96,18 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     rim.position.set(-4, 6, 8);
     scene.add(rim);
 
-    // Floor to ground models + receive soft shadows
-    const floorMat = new THREE.ShadowMaterial({ opacity: 0.25 });
+    // NEW: Floor with a visible, dark material
+    const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a, // Dark grey, slightly lighter than room
+        metalness: 0.2,
+        roughness: 0.7
+    });
     const floorGeo = new THREE.PlaneGeometry(200, 200);
     floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0;
     floor.receiveShadow = true;
     scene.add(floor);
-
-    // Optional: subtle reference (invisible grid feel via lines, very faint)
-    const grid = new THREE.GridHelper(20, 20, 0x35506a, 0x1d2a36);
-    grid.material.opacity = 0.15;
-    grid.material.transparent = true;
-    grid.position.y = 0.001;
-    scene.add(grid);
 
     // Warmup log
     Task.log('Viewer lighting rig initialised (hemi + 3x dir)');
