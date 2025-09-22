@@ -10,7 +10,6 @@
         style.textContent = `
             #tf-toggles-panel {
                 position: fixed;
-                /* --- UPDATED COORDINATES --- */
                 bottom: 383px;
                 left: 16px;
                 z-index: 25;
@@ -42,7 +41,6 @@
             }
             .tf-toggle-row label {
                 color: #e6eef6;
-                /* --- UPDATED FONT SIZE --- */
                 font-size: 15px;
                 cursor: pointer;
                 padding: 0;
@@ -93,16 +91,17 @@
     function togglePanel(show) { panel.classList.toggle('show', show); }
 
     function wireEvents() {
-        // Prevent clicks inside the panel from closing it
-        panel.addEventListener('click', e => e.stopPropagation());
+        // Prevent pointer events inside the panel from bubbling up to the window.
+        panel.addEventListener('pointerdown', e => e.stopPropagation());
         
-        // Close the panel if a click occurs anywhere else
-        window.addEventListener('click', () => { 
+        // Close the panel if a pointer event occurs anywhere else.
+        window.addEventListener('pointerdown', () => { 
             if (panel.classList.contains('show')) {
                 togglePanel(false);
             }
         });
 
+        // Checkbox logic remains the same.
         panel.querySelector('#rig-toggle-checkbox').addEventListener('change', e => window.Rig?.setVisible(e.target.checked));
         panel.querySelector('#hide-toggle-checkbox').addEventListener('change', e => window.Hide?.setVisible(e.target.checked));
     }
