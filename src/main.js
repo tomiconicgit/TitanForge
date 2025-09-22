@@ -1,5 +1,5 @@
 // src/main.js — Director/orchestrator for Titan Forge PWA
-// No local imports yet. Centralises boot order and shared utilities.
+// Centralises boot order and shared utilities.
 
 (() => {
   'use strict';
@@ -12,6 +12,9 @@
   };
 
   const App = {
+    // NEW: start guard
+    _started: false,
+
     version: '0.0.1',
     phonebook: null,          // filled on start from window.Phonebook
     glVersion: null,
@@ -65,6 +68,10 @@
 
     // ---- Boot ---------------------------------------------------------------
     async start() {
+      // NEW: prevent double-start
+      if (this._started) { Task.log('Director already started; ignoring.'); return; }
+      this._started = true;
+
       Task.start('director', 'Director starting');
 
       try {
@@ -109,10 +116,17 @@
   // Expose globally for later modules to use
   window.App = App;
 
-  // Start only after loader’s "Continue" (from loading.js)
-  window.addEventListener('app:launch', () => App.start());
+  // ---- Start after loader’s Continue (and be robust to different dispatchers)
+  const kick = () => window.App.start();
+  window.addEventListener('app:launch', kick);     // existing path
+  document.addEventListener('app:launch', kick);   // NEW: extra listener
 
-  // Helpful log while idle (in case someone bypasses the loader)
+  // Safety: if the loader isn't present (or already removed), auto-start
+  if (!document.getElementById('tf-loader')) {
+    setTimeout(() => { if (!App._started) App.start(); }, 0);  // NEW
+  }
+
+  // Helpful log while idle
   if (document.readyState !== 'loading') {
     Task.log('Director loaded; waiting for app:launch (press Continue). You can also call App.start() manually.');
   } else {
