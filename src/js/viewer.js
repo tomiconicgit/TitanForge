@@ -12,7 +12,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     log:   (msg)       => window.Debug?.log?.(msg)
   };
 
-  let renderer, scene, camera, controls, container, floor;
+  let renderer, scene, camera, controls, container;
 
   // Inject minimal CSS for the viewer container
   const style = document.createElement('style');
@@ -41,16 +41,19 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   function initThree() {
     // Scene
     scene = new THREE.Scene();
+    
+    // **NEW**: Blender-style gradient background
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 2;
+    const context = canvas.getContext('2d');
+    const gradient = context.createLinearGradient(0, 0, 0, 2);
+    gradient.addColorStop(0, '#595f66'); // Lighter grey at the top
+    gradient.addColorStop(1, '#33373d'); // Darker grey at the bottom
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 2, 2);
+    scene.background = new THREE.CanvasTexture(canvas);
 
-    // Environment - A large sphere to act as a studio room
-    const roomGeo = new THREE.SphereGeometry(100, 64, 32);
-    const roomMat = new THREE.MeshStandardMaterial({
-      color: 0xe8e8e8, // Changed to off-white
-      side: THREE.BackSide,
-      metalness: 0.1
-    });
-    const room = new THREE.Mesh(roomGeo, roomMat);
-    scene.add(room);
 
     // Camera
     camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
@@ -77,40 +80,25 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     controls.minDistance = 1.2;
     controls.maxDistance = 12;
 
-    // Lighting â hemisphere + gentle three-point rig
-    const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x1a2530, 1.5); // Increased intensity from 0.8
+    // **UPDATED**: Blender-style ambient lighting
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.5);
     scene.add(hemi);
+    
+    const spotLight = new THREE.SpotLight(0xffffff, 1.5, 0, Math.PI / 4, 0.5, 1);
+    spotLight.position.set(5, 8, 3);
+    spotLight.castShadow = true;
+    spotLight.shadow.mapSize.set(1024, 1024);
+    spotLight.shadow.radius = 3;
+    scene.add(spotLight);
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.2);
-    key.position.set(5, 8, 6);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    key.shadow.radius = 3;
-    scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xbfd6ff, 0.9); // Increased intensity from 0.7
-    fill.position.set(-6, 5, -4);
-    scene.add(fill);
+    // **NEW**: Blender-style grid
+    const grid = new THREE.GridHelper(20, 20, 0xcccccc, 0x777777);
+    scene.add(grid);
 
-    const rim = new THREE.DirectionalLight(0xffe0bf, 0.5);
-    rim.position.set(-4, 6, 8);
-    scene.add(rim);
-
-    // Floor with a visible, dark material
-    const floorMat = new THREE.MeshStandardMaterial({
-        color: 0xd8d8d8, // Changed to a shade darker than the environment
-        metalness: 0.2,
-        roughness: 0.7
-    });
-    const floorGeo = new THREE.PlaneGeometry(200, 200);
-    floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
-    floor.receiveShadow = true;
-    scene.add(floor);
 
     // Warmup log
-    Task.log('Viewer lighting rig initialised (hemi + 3x dir)');
+    Task.log('Viewer initialised (Blender style)');
   }
 
   function resize() {
