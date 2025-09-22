@@ -10,6 +10,7 @@
     const elementsToControl = {
         '-- Select Element --': null,
         'Rig Toggle': '#tf-rig-toggle',
+        'Hide Toggle': '#tf-hide-toggle',
         'Menu Button': '#tf-menu-container' // We target the container for position
     };
 
@@ -105,8 +106,8 @@
         if (mainTarget && mainTarget.id === 'tf-menu-container') {
             return mainTarget.querySelector('#tf-menu-button');
         }
-        // For the Rig Toggle, the container and the text are the same element.
-        if (mainTarget && mainTarget.id === 'tf-rig-toggle') {
+        // For the toggles, the container is positioned but the text label is styled.
+        if (mainTarget && (mainTarget.id === 'tf-rig-toggle' || mainTarget.id === 'tf-hide-toggle')) {
             return mainTarget.querySelector('label:first-child');
         }
         return mainTarget;
