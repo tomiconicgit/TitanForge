@@ -156,12 +156,11 @@
             event.stopPropagation();
         });
 
-        // Handle actions within the card
         menuCard.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (!action) return;
 
-            toggleMenu(false); // Always close the menu after an action.
+            toggleMenu(false);
             
             setTimeout(() => {
                 if (action === 'load') {
