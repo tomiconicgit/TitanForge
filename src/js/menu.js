@@ -117,7 +117,6 @@
                     bus.dispatchEvent(new CustomEvent('action', { detail: { action } }));
                     console.log(`Menu action: ${action}`);
                 }
-
                 toggleMenu(false);
             }
         });
@@ -131,14 +130,11 @@
 
     function bootstrap() {
         if (window.Menu) return;
-
         injectUI();
         wireEvents();
-
         window.Menu = {
             on: (type, fn) => bus.addEventListener(type, fn),
         };
-
         window.App?.emit('menu:ready');
         window.Debug?.log('Menu UI ready.');
     }
@@ -148,5 +144,4 @@
     } else {
         window.App?.on('app:booted', bootstrap);
     }
-
 })();
