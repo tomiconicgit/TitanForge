@@ -45,7 +45,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     // Environment - A large sphere to act as a studio room
     const roomGeo = new THREE.SphereGeometry(100, 64, 32);
     const roomMat = new THREE.MeshStandardMaterial({
-      color: 0x08080a, // Very dark grey
+      color: 0x404040, // Changed from 0x08080a to a medium grey
       side: THREE.BackSide,
       metalness: 0.1
     });
@@ -77,7 +77,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     controls.minDistance = 1.2;
     controls.maxDistance = 12;
 
-    // Lighting — hemisphere + gentle three-point rig (UNCHANGED)
+    // Lighting â hemisphere + gentle three-point rig (UNCHANGED)
     const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x1a2530, 0.8);
     scene.add(hemi);
 
@@ -98,7 +98,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     // Floor with a visible, dark material
     const floorMat = new THREE.MeshStandardMaterial({
-        color: 0x1a1a1a, // Dark grey, slightly lighter than room
+        color: 0x262626, // Changed from 0x1a1a1a to a lighter dark grey
         metalness: 0.2,
         roughness: 0.7
     });
