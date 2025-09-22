@@ -9,7 +9,7 @@
 
     const elementsToControl = {
         '-- Select Element --': null,
-        'Toggles Container': '#tf-toggles-container',
+        'Toggles Panel': '#tf-toggles-panel',
         'Menu Button': '#tf-menu-container' // We target the container for position
     };
 
@@ -99,19 +99,18 @@
     }
 
     function getStyleTarget(mainTarget) {
-        // For the Menu, we position the container but style the button inside.
         if (mainTarget && mainTarget.id === 'tf-menu-container') {
-            return mainTarget.querySelector('#tf-menu-button');
+            // For the Menu, we style the initial button text, not the whole card
+            return mainTarget.querySelector('#tf-menu-button-text');
         }
-        // For the Toggles, we position the container but style the button inside.
-        if (mainTarget && mainTarget.id === 'tf-toggles-container') {
-            return mainTarget.querySelector('#tf-toggles-button');
+        if (mainTarget && mainTarget.id === 'tf-toggles-panel') {
+            // For the Toggles Panel, we style the first label as a sample
+            return mainTarget.querySelector('.tf-toggle-row label');
         }
         return mainTarget;
     }
 
     function updateTargetElement(selector) {
-        targetIsContainer = false;
         if (!selector || selector === 'null') {
             targetElement = null;
             updateCopyOutput();
@@ -121,8 +120,8 @@
         
         if (targetElement) {
             const styleTarget = getStyleTarget(targetElement) || targetElement;
-            const posStyle = window.getComputedStyle(targetElement); // for position
-            const style = window.getComputedStyle(styleTarget);    // for style
+            const posStyle = window.getComputedStyle(targetElement);
+            const style = window.getComputedStyle(styleTarget);
             
             const fontSize = parseInt(style.fontSize, 10);
             const paddingY = parseInt(style.paddingTop, 10);
@@ -136,7 +135,7 @@
             bottomSlider.value = isNaN(bottom) ? 0 : bottom;
             leftSlider.value = isNaN(left) ? 0 : left;
             
-            applyStyles(); // Sync UI
+            applyStyles();
         }
     }
 
@@ -144,22 +143,18 @@
         if (!targetElement) return;
 
         const styleTarget = getStyleTarget(targetElement) || targetElement;
-
         const fontSize = `${fontSizeSlider.value}px`;
         const padding = `${paddingYSlider.value}px ${paddingXSlider.value}px`;
         const bottom = `${bottomSlider.value}px`;
         const left = `${leftSlider.value}px`;
 
-        // Apply styles to the appropriate element
         styleTarget.style.fontSize = fontSize;
         if(styleTarget.style.padding !== undefined) styleTarget.style.padding = padding;
-
         targetElement.style.bottom = bottom;
         targetElement.style.left = left;
         targetElement.style.top = 'auto';
         targetElement.style.right = 'auto';
         
-        // Update text values
         fontSizeValue.textContent = fontSize;
         paddingYValue.textContent = `${paddingYSlider.value}px`;
         paddingXValue.textContent = `${paddingXSlider.value}px`;
@@ -174,25 +169,20 @@
             return;
         }
         const styleTarget = getStyleTarget(targetElement) || targetElement;
-
         let output = `/* For ${targetElement.id} */\n`;
         output += `bottom: ${bottomSlider.value}px;\nleft: ${leftSlider.value}px;\n`;
-        output += `\n/* For ${styleTarget.id || 'inner element'} */\n`;
+        output += `\n/* For inner element */\n`;
         output += `font-size: ${fontSizeSlider.value}px;\npadding: ${paddingYSlider.value}px ${paddingXSlider.value}px;`;
-
         outputPre.textContent = output;
     }
 
     function wireEvents() {
         devButton.addEventListener('click', () => panel.classList.toggle('show'));
         panel.querySelector('.dev-close').addEventListener('click', () => panel.classList.remove('show'));
-        panel.querySelector('#dev-element-select').addEventListener('change', (e) => updateTargetElement(e.target.value));
+        panel.querySelector('#dev-element-select').addEventListener('change', e => updateTargetElement(e.target.value));
         
-        fontSizeSlider.addEventListener('input', applyStyles);
-        paddingXSlider.addEventListener('input', applyStyles);
-        paddingYSlider.addEventListener('input', applyStyles);
-        bottomSlider.addEventListener('input', applyStyles);
-        leftSlider.addEventListener('input', applyStyles);
+        const sliders = [fontSizeSlider, paddingXSlider, paddingYSlider, bottomSlider, leftSlider];
+        sliders.forEach(slider => slider.addEventListener('input', applyStyles));
 
         copyButton.addEventListener('click', () => {
             navigator.clipboard.writeText(outputPre.textContent).then(() => {
@@ -210,10 +200,6 @@
         window.Debug?.log('Developer tool ready.');
     }
 
-    if (window.App?.glVersion) {
-        bootstrap();
-    } else {
-        window.App?.on('app:booted', bootstrap);
-    }
-
+    if (window.App?.glVersion) bootstrap();
+    else window.App?.on('app:booted', bootstrap);
 })();
