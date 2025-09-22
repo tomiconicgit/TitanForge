@@ -10,7 +10,8 @@
         style.textContent = `
             #tf-toggles-panel {
                 position: fixed;
-                bottom: 16px;
+                /* --- UPDATED COORDINATES --- */
+                bottom: 383px;
                 left: 16px;
                 z-index: 25;
                 min-width: 180px;
@@ -39,7 +40,13 @@
                 align-items: center;
                 justify-content: space-between;
             }
-            .tf-toggle-row label { color: #e6eef6; font-size: 14px; cursor: pointer; }
+            .tf-toggle-row label {
+                color: #e6eef6;
+                /* --- UPDATED FONT SIZE --- */
+                font-size: 15px;
+                cursor: pointer;
+                padding: 0;
+            }
             .tf-switch {
                 position: relative; display: inline-block;
                 width: 30px; height: 16px; flex-shrink: 0;
@@ -86,8 +93,16 @@
     function togglePanel(show) { panel.classList.toggle('show', show); }
 
     function wireEvents() {
+        // Prevent clicks inside the panel from closing it
         panel.addEventListener('click', e => e.stopPropagation());
-        window.addEventListener('click', () => { if (panel.classList.contains('show')) togglePanel(false); });
+        
+        // Close the panel if a click occurs anywhere else
+        window.addEventListener('click', () => { 
+            if (panel.classList.contains('show')) {
+                togglePanel(false);
+            }
+        });
+
         panel.querySelector('#rig-toggle-checkbox').addEventListener('change', e => window.Rig?.setVisible(e.target.checked));
         panel.querySelector('#hide-toggle-checkbox').addEventListener('change', e => window.Hide?.setVisible(e.target.checked));
     }
