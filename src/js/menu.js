@@ -145,6 +145,13 @@
             event.stopPropagation(); // Prevent this click from being caught by the window listener immediately
             toggleMenu(true);
         });
+        
+        // **FIX STARTS HERE**
+        // Prevent clicks inside the menu from closing it via the window listener.
+        menuCard.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        // **FIX ENDS HERE**
 
         // Handle actions within the card
         menuCard.addEventListener('click', (event) => {
