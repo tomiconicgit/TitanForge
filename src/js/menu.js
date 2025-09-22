@@ -128,27 +128,34 @@
     function showLoadModal(show) { loadModal.classList.toggle('show', show); }
 
     function wireEvents() {
-        // Use pointerdown for primary interaction to be more robust on touch devices.
+        // --- FULLY REVISED EVENT LOGIC ---
+
         menuContainer.addEventListener('pointerdown', (event) => {
-            event.stopPropagation(); // Stop this event from reaching the window listener.
+            // Stop this event from reaching the window listener and causing an immediate close.
+            event.stopPropagation();
             
-            // Only toggle if the click is on the button itself or the card's background.
-            // Clicks on the option buttons are handled by their own 'click' listener.
-            if (!event.target.closest('.tf-menu-options')) {
+            const optionButton = event.target.closest('.tf-menu-options button');
+
+            if (optionButton) {
+                // An option button was pressed. Use a 'click' listener on the parent 
+                // to ensure the action only fires on a complete tap/click.
+                return;
+            } else {
+                // The menu background or initial button text was pressed. Toggle the menu.
                 toggleMenu(!menuContainer.classList.contains('open'));
             }
         });
-
-        // Use 'click' for the option buttons as these are clear user actions.
+        
+        // A single 'click' listener on the options container handles all button actions.
         const options = menuContainer.querySelector('.tf-menu-options');
         options.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (!action) return;
 
-            toggleMenu(false); // Always close menu after an action
+            toggleMenu(false); // Always close the menu after an action.
             
             if (action === 'load') {
-                setTimeout(() => showLoadModal(true), 400);
+                setTimeout(() => showLoadModal(true), 400); // Wait for menu animation.
             } else if (action === 'toggles') {
                 window.Toggles?.show();
             } else if (action === 'save') {
@@ -156,6 +163,7 @@
             }
         });
 
+        // Load Modal logic remains the same.
         loadModal.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (action === 'load-model') {
@@ -169,7 +177,7 @@
             }
         });
 
-        // This listener will now catch any pointerdown that wasn't stopped by the menu itself.
+        // The global listener now reliably closes the menu.
         window.addEventListener('pointerdown', () => {
             if (menuContainer.classList.contains('open')) {
                 toggleMenu(false);
