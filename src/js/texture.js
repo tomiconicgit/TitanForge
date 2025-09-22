@@ -8,8 +8,6 @@
     let selectedMesh = null;
     let mapTypeToLoad = null;
 
-    // **FIX**: Declare MAP_CONFIG here, but define it inside bootstrap
-    // to ensure THREE is available.
     let MAP_CONFIG;
 
     // --- UI Injection ---
@@ -80,15 +78,6 @@
         controlsContainer = panel.querySelector('#tf-textures-controls');
         meshSelect = panel.querySelector('#tf-mesh-select');
         mapButtonsContainer = panel.querySelector('.tf-maps-grid');
-        
-        // Create the grid of buttons from our config
-        Object.keys(MAP_CONFIG).forEach(name => {
-            const button = document.createElement('button');
-            button.className = 'tf-map-button';
-            button.textContent = name;
-            button.dataset.mapName = name;
-            mapButtonsContainer.appendChild(button);
-        });
     }
 
     // --- Logic ---
@@ -207,7 +196,6 @@
         if (window.Textures) return;
         const { THREE } = window.Phonebook;
         
-        // **FIX**: Define MAP_CONFIG here now that THREE is guaranteed to exist.
         MAP_CONFIG = {
             'Albedo': { prop: 'map', colorSpace: THREE.SRGBColorSpace },
             'Normal': { prop: 'normalMap' },
@@ -218,6 +206,16 @@
         };
         
         injectUI();
+        
+        // **FIX**: Create buttons after MAP_CONFIG and the UI container exist.
+        Object.keys(MAP_CONFIG).forEach(name => {
+            const button = document.createElement('button');
+            button.className = 'tf-map-button';
+            button.textContent = name;
+            button.dataset.mapName = name;
+            mapButtonsContainer.appendChild(button);
+        });
+
         wireEvents();
         window.Textures = {};
         window.Debug?.log('Textures Panel ready.');
