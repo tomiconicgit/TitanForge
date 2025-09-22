@@ -4,13 +4,15 @@
     'use strict';
 
     let panel, devButton, targetElement, copyButton, outputPre;
-    let topSlider, leftSlider, bottomSlider, rightSlider;
-    let topValue, leftValue, bottomValue, rightValue;
+    // NEW: Add references for width and height sliders
+    let widthSlider, heightSlider;
+    let bottomSlider, leftSlider;
+    let widthValue, heightValue, bottomValue, leftValue;
 
     const elementsToControl = {
         '-- Select Element --': null,
         'Rig Toggle': '#tf-rig-toggle',
-        'Menu Button': '#tf-menu-container'
+        'Menu Button': '#tf-menu-button'
     };
 
     // --- UI Injection ---
@@ -27,8 +29,8 @@
                 position: fixed; left:0; right:0; bottom:0; height: 50vh;
                 background: rgba(30,30,35,0.95); backdrop-filter: blur(10px);
                 border-top: 1px solid rgba(255,255,255,0.1); z-index: 999;
-                display: none; flex-direction: column; padding: 20px; gap: 15px;
-                color: #fff; font-family: sans-serif;
+                display: none; flex-direction: column; padding: 10px 20px; gap: 10px;
+                color: #fff; font-family: sans-serif; overflow-y: auto;
             }
             #tf-dev-panel.show { display: flex; }
             #tf-dev-panel .dev-header { display: flex; justify-content: space-between; align-items: center; }
@@ -54,12 +56,21 @@
         const selectOptions = Object.keys(elementsToControl)
             .map(name => `<option value="${elementsToControl[name]}">${name}</option>`).join('');
 
+        // **NEW**: Added width and height sliders to innerHTML
         panel.innerHTML = `
             <div class="dev-header">
                 <h3>UI Positioner</h3>
                 <span class="dev-close">&times;</span>
             </div>
             <select id="dev-element-select">${selectOptions}</select>
+            <div class="slider-group">
+                <label>Width: <span id="dev-val-width">0px</span></label>
+                <input type="range" id="dev-slider-width" min="20" max="400" value="100">
+            </div>
+            <div class="slider-group">
+                <label>Height: <span id="dev-val-height">0px</span></label>
+                <input type="range" id="dev-slider-height" min="20" max="200" value="40">
+            </div>
             <div class="slider-group">
                 <label>Bottom: <span id="dev-val-bottom">0px</span></label>
                 <input type="range" id="dev-slider-bottom" min="0" max="1000" value="0">
@@ -68,16 +79,20 @@
                 <label>Left: <span id="dev-val-left">0px</span></label>
                 <input type="range" id="dev-slider-left" min="0" max="1000" value="0">
             </div>
-            <pre id="dev-output-css">bottom: 0px;\nleft: 0px;</pre>
+            <pre id="dev-output-css">Select an element to position.</pre>
             <button id="dev-copy-css">Copy CSS</button>
         `;
         document.getElementById('app')?.appendChild(panel);
 
-        // Assign element references
+        // Assign all element references
         copyButton = panel.querySelector('#dev-copy-css');
         outputPre = panel.querySelector('#dev-output-css');
+        widthSlider = panel.querySelector('#dev-slider-width');
+        heightSlider = panel.querySelector('#dev-slider-height');
         bottomSlider = panel.querySelector('#dev-slider-bottom');
         leftSlider = panel.querySelector('#dev-slider-left');
+        widthValue = panel.querySelector('#dev-val-width');
+        heightValue = panel.querySelector('#dev-val-height');
         bottomValue = panel.querySelector('#dev-val-bottom');
         leftValue = panel.querySelector('#dev-val-left');
     }
@@ -86,16 +101,26 @@
     function updateTargetElement(selector) {
         if (!selector || selector === 'null') {
             targetElement = null;
+            updateCopyOutput();
             return;
         }
         targetElement = document.querySelector(selector);
         if (targetElement) {
             const style = window.getComputedStyle(targetElement);
+            // **NEW**: Read width and height
+            const width = parseInt(style.width, 10);
+            const height = parseInt(style.height, 10);
             const bottom = parseInt(style.bottom, 10);
             const left = parseInt(style.left, 10);
             
+            // **NEW**: Update width and height sliders
+            widthSlider.value = width;
+            heightSlider.value = height;
             bottomSlider.value = bottom;
             leftSlider.value = left;
+
+            widthValue.textContent = `${width}px`;
+            heightValue.textContent = `${height}px`;
             bottomValue.textContent = `${bottom}px`;
             leftValue.textContent = `${left}px`;
             updateCopyOutput();
@@ -104,15 +129,26 @@
 
     function applyStyles() {
         if (!targetElement) return;
+
+        // **NEW**: Read and apply width/height
+        const width = `${widthSlider.value}px`;
+        const height = `${heightSlider.value}px`;
         const bottom = `${bottomSlider.value}px`;
         const left = `${leftSlider.value}px`;
 
+        targetElement.style.width = width;
+        targetElement.style.height = height;
         targetElement.style.bottom = bottom;
         targetElement.style.left = left;
+
+        // Override other properties for clean positioning
         targetElement.style.top = 'auto';
         targetElement.style.right = 'auto';
-        targetElement.style.transform = 'none'; // Override transform for precise positioning
+        targetElement.style.transform = 'none';
 
+        // **NEW**: Update text values
+        widthValue.textContent = width;
+        heightValue.textContent = height;
         bottomValue.textContent = bottom;
         leftValue.textContent = left;
         updateCopyOutput();
@@ -123,7 +159,8 @@
             outputPre.textContent = 'Select an element to position.';
             return;
         }
-        outputPre.textContent = `bottom: ${bottomSlider.value}px;\nleft: ${leftSlider.value}px;`;
+        // **NEW**: Add width and height to output
+        outputPre.textContent = `bottom: ${bottomSlider.value}px;\nleft: ${leftSlider.value}px;\nwidth: ${widthSlider.value}px;\nheight: ${heightSlider.value}px;`;
     }
 
     // --- Event Handlers ---
@@ -132,6 +169,9 @@
         panel.querySelector('.dev-close').addEventListener('click', () => panel.classList.remove('show'));
         panel.querySelector('#dev-element-select').addEventListener('change', (e) => updateTargetElement(e.target.value));
         
+        // **NEW**: Add listeners for new sliders
+        widthSlider.addEventListener('input', applyStyles);
+        heightSlider.addEventListener('input', applyStyles);
         bottomSlider.addEventListener('input', applyStyles);
         leftSlider.addEventListener('input', applyStyles);
 
