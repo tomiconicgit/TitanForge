@@ -89,6 +89,13 @@
             #tf-menu-card button:hover, .tf-load-modal-content button:hover {
                 background-color: rgba(255, 255, 255, 0.1);
             }
+            
+            /* Disabled button style */
+            #tf-menu-card button:disabled, .tf-load-modal-content button:disabled {
+                color: #777;
+                cursor: not-allowed;
+                background-color: transparent;
+            }
 
             /* Modal styles (unchanged) */
             .tf-load-modal-content {
@@ -113,6 +120,7 @@
             <div id="tf-menu-card">
                 <button data-action="load">Load</button>
                 <button data-action="toggles">Toggles</button>
+                <button data-action="animation">Animation</button>
                 <button data-action="copy">Copy Data</button> 
             </div>
         `;
@@ -160,8 +168,10 @@
                     showLoadModal(true);
                 } else if (action === 'toggles') {
                     window.Toggles?.show();
+                } else if (action === 'animation') {
+                    window.Animation?.show();
                 } else if (action === 'copy') {
-                    window.Copy?.show(); // <-- ADDED: Trigger the copy modal
+                    window.Copy?.show();
                 }
             }, 300);
         });
