@@ -60,8 +60,8 @@
   .tf-bar-wrapper {
     width: 100%;
     position: relative;
-    height: 10px; /* Slimmer bar */
-    border-radius: 5px;
+    height: 14px; /* Slightly thicker bar */
+    border-radius: 7px; /* Corresponding radius */
     overflow: hidden;
     background: rgba(255,255,255,.1);
     border: none;
@@ -221,7 +221,7 @@
   // ---- Task tracker ---------------------------------------------------------
   const tasks = new Map();
   const state = { done:0, failed:0, total: 0 };
-  let isFinalized = false; // **FIX**: Prevents bar from moving after completion/failure
+  let isFinalized = false; // Prevents bar from moving after completion/failure
   
   const ui = {
     logoContainer: () => document.getElementById('tf-logo-container'),
@@ -236,7 +236,7 @@
   };
 
   function updateBar() {
-    if (isFinalized) return; // **FIX**: Stop updating the bar once loading is finished
+    if (isFinalized) return; // Stop updating the bar once loading is finished
 
     const total = Math.max(state.total, 1);
     const pct = Math.floor((state.done / total) * 100);
@@ -275,7 +275,7 @@
     if (card && errorActions) {
       logEl().textContent = errorInfo;
       card.classList.add('show');
-      errorActions.classList.add('show'); // **FIX**: Show reload button container
+      errorActions.classList.add('show');
       
       ui.reloadBtn().onclick = () => location.reload();
       ui.copyBtn().onclick = async () => {
