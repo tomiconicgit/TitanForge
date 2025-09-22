@@ -12,14 +12,12 @@
   };
 
   const App = {
-    // NEW: start guard
     _started: false,
-
     version: '0.0.1',
-    phonebook: null,          // filled on start from window.Phonebook
+    phonebook: null,
     glVersion: null,
-    bus: new EventTarget(),   // simple app-wide event hub
-    stages: [],               // [{ id, label, fn, optional }]
+    bus: new EventTarget(),
+    stages: [],
     config: {
       baseURL: new URL('.', location.href).href
     },
@@ -54,10 +52,11 @@
 
     // ---- Safe dynamic import for later modules ------------------------------
     async import(id, path, { optional = false } = {}) {
-      Task.start(`mod:${id}`, `Loading module ${id}`);
+      // This will now register a task with the loading screen
+      Task.start(`mod:${id}`, `Loading module: ${id}`);
       try {
         const mod = await import(path);
-        Task.done(`mod:${id}`, path);
+        Task.done(`mod:${id}`);
         return mod;
       } catch (e) {
         if (optional) { Task.done(`mod:${id}`, 'optional missing'); return null; }
@@ -68,7 +67,6 @@
 
     // ---- Boot ---------------------------------------------------------------
     async start() {
-      // NEW: prevent double-start
       if (this._started) { Task.log('Director already started; ignoring.'); return; }
       this._started = true;
 
@@ -97,11 +95,14 @@
         this.addStage('dom:mount', 'Mounting root container', async () => {
           const root = document.getElementById('app');
           if (!root) throw new Error('#app not found');
-          // Reserve a hook for the first real screen (we’ll attach later).
           root.setAttribute('data-app-mounted', '1');
         });
 
         await this.runStages();
+
+        // **NEW**: Load primary UI modules from the director
+        await this.import('viewer', './js/viewer.js');
+        await this.import('navigation', '../navigation.js');
 
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
@@ -118,12 +119,12 @@
 
   // ---- Start after loader’s Continue (and be robust to different dispatchers)
   const kick = () => window.App.start();
-  window.addEventListener('app:launch', kick);     // existing path
-  document.addEventListener('app:launch', kick);   // NEW: extra listener
+  window.addEventListener('app:launch', kick);
+  document.addEventListener('app:launch', kick);
 
   // Safety: if the loader isn't present (or already removed), auto-start
   if (!document.getElementById('tf-loader')) {
-    setTimeout(() => { if (!App._started) App.start(); }, 0);  // NEW
+    setTimeout(() => { if (!App._started) App.start(); }, 0);
   }
 
   // Helpful log while idle
