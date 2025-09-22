@@ -119,10 +119,10 @@
     function setActiveAsset(assetId) {
         if (activeAssetId === assetId) return;
         activeAssetId = assetId;
-        console.log(`Active asset is now: ${assetId}`);
-        // Here you would emit an event for other tools to listen to
-        App.emit('asset:activated', assets.get(assetId));
-        render(); // Re-render to apply the '.active' class
+        
+        // **FIX**: Emit the asset data object, or null if no asset is active
+        App.emit('asset:activated', assetId ? assets.get(assetId) : null);
+        render();
     }
 
     // --- Event Handlers ---
@@ -143,15 +143,19 @@
         const { id } = event.detail;
         if (id && assets.has(id)) {
             assets.delete(id);
-            // If the active asset was deleted, clear the active state
+
+            // **FIX**: If the active asset was deleted, find a new one or deactivate.
             if (activeAssetId === id) {
-                activeAssetId = null;
-                 // Optionally, make another asset active
+                let nextAssetId = null;
+                // If other assets still exist, make the first one active
                 if (assets.size > 0) {
-                   setActiveAsset(assets.keys().next().value);
+                   nextAssetId = assets.keys().next().value;
                 }
+                // This will correctly deactivate if nextAssetId is null
+                setActiveAsset(nextAssetId);
+            } else {
+                 render(); // Just re-render if a non-active tab was closed
             }
-            render();
         }
     }
 
