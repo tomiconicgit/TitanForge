@@ -59,9 +59,10 @@
                 opacity: 0;
                 transform: scale(0.95);
                 transition: opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s;
-                pointer-events: none;
+                pointer-events: none; /* Initially not clickable */
             }
-            #tf-menu-container.open .tf-menu-options {
+            /* --- NEW CLASS to enable pointer events after animation starts --- */
+            #tf-menu-container.open.interactive .tf-menu-options {
                 opacity: 1;
                 transform: scale(1);
                 pointer-events: auto;
@@ -124,29 +125,33 @@
         document.body.appendChild(loadModal);
     }
 
-    function toggleMenu(show) { menuContainer.classList.toggle('open', show); }
+    function toggleMenu(show) {
+        if (show) {
+            menuContainer.classList.add('open');
+            // After a short delay, make the buttons interactive.
+            // This prevents the same click that opened the menu from triggering a button.
+            setTimeout(() => {
+                if (menuContainer.classList.contains('open')) {
+                     menuContainer.classList.add('interactive');
+                }
+            }, 100);
+        } else {
+            menuContainer.classList.remove('open', 'interactive');
+        }
+    }
+
     function showLoadModal(show) { loadModal.classList.toggle('show', show); }
 
     function wireEvents() {
-        // --- FULLY REVISED EVENT LOGIC ---
-
-        menuContainer.addEventListener('pointerdown', (event) => {
-            // Stop this event from reaching the window listener and causing an immediate close.
-            event.stopPropagation();
-            
-            const optionButton = event.target.closest('.tf-menu-options button');
-
-            if (optionButton) {
-                // An option button was pressed. Use a 'click' listener on the parent 
-                // to ensure the action only fires on a complete tap/click.
-                return;
-            } else {
-                // The menu background or initial button text was pressed. Toggle the menu.
-                toggleMenu(!menuContainer.classList.contains('open'));
+        // Use a single 'click' listener on the container.
+        menuContainer.addEventListener('click', (event) => {
+            // Clicks on buttons inside the options are handled by the next block.
+            // This condition handles clicks on the initial "Menu" button or the expanded card's background.
+            if (!event.target.closest('.tf-menu-options button')) {
+                 toggleMenu(!menuContainer.classList.contains('open'));
             }
         });
         
-        // A single 'click' listener on the options container handles all button actions.
         const options = menuContainer.querySelector('.tf-menu-options');
         options.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
@@ -163,7 +168,6 @@
             }
         });
 
-        // Load Modal logic remains the same.
         loadModal.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (action === 'load-model') {
@@ -177,9 +181,9 @@
             }
         });
 
-        // The global listener now reliably closes the menu.
-        window.addEventListener('pointerdown', () => {
-            if (menuContainer.classList.contains('open')) {
+        // Use 'pointerdown' for the global click-off listener for maximum reliability.
+        window.addEventListener('pointerdown', (event) => {
+            if (menuContainer.classList.contains('open') && !menuContainer.contains(event.target)) {
                 toggleMenu(false);
             }
         });
