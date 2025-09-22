@@ -174,6 +174,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     }
   }
 
-  // Wait for the director to finish its stages, then mount the viewer
-  window.addEventListener('app:booted', bootstrap);
-})();
+// at the end of viewer.js
+window.addEventListener('app:booted', bootstrap);
+
+// NEW: late-load safety — if boot already happened, mount now
+if (window.App && window.App.glVersion) {
+  bootstrap();
+}
