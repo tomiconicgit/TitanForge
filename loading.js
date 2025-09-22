@@ -1,4 +1,4 @@
-// loading.js — Titan Forge launch screen + task tracker + fade-in
+// loading.js — Titan Forge launch screen + task tracker + manual continue
 (() => {
   // ---- DOM scaffold ---------------------------------------------------------
   const style = document.createElement('style');
@@ -40,6 +40,7 @@
     background:rgba(255,255,255,.06); color:var(--tf-fg); cursor:pointer;
   }
   .tf-btn:active { transform:translateY(1px); }
+  .tf-btn[disabled] { opacity:.45; pointer-events:none; }
   #tf-debugger {
     background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px;
     display:flex; flex-direction:column; gap:8px; min-height:140px; max-height:36vh;
@@ -59,7 +60,6 @@
     <div class="tf-card" role="status" aria-live="polite">
       <div class="tf-brand">
         <svg class="tf-logo" viewBox="0 0 64 64" aria-hidden="true">
-          <!-- Titan Forge logo (simple anvil + flame) -->
           <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#52a8ff"/><stop offset="1" stop-color="#1e90ff"/></linearGradient></defs>
           <path d="M12 42h40v6H12z" fill="url(#g)"/>
           <path d="M20 36h24l-4 6H24z" fill="#83c2ff"/>
@@ -78,6 +78,7 @@
       <div class="tf-row">
         <div class="tf-status" id="tf-status">Preparing…</div>
         <div class="tf-actions">
+          <button class="tf-btn" id="tf-continue" disabled>Continue</button>
           <button class="tf-btn" id="tf-copy">Copy Logs</button>
           <button class="tf-btn" id="tf-hide">Hide</button>
         </div>
@@ -90,7 +91,7 @@
     </div>`;
   document.body.appendChild(el);
 
-  // ---- Logger (works even if debugger.js not loaded yet) --------------------
+  // ---- Logger ---------------------------------------------------------------
   const logBuffer = [];
   const logEl = () => document.getElementById('tf-log');
   const ts = () => new Date().toISOString().replace('T',' ').replace('Z','');
@@ -102,38 +103,53 @@
       pre.textContent += (pre.textContent ? '\n' : '') + line;
       pre.scrollTop = pre.scrollHeight;
     }
-    // Let debugger.js also see logs
     window.dispatchEvent(new CustomEvent('tf:log', { detail: { level, msg, time: Date.now() }}));
   };
 
   // ---- Task tracker ---------------------------------------------------------
-  const tasks = new Map();   // id -> { label, state: 'pending'|'done'|'failed' }
+  const tasks = new Map();   // id -> { label, state }
   const state = { done:0, failed:0 };
+  const ui = {
+    fill: () => document.getElementById('tf-fill'),
+    pct: () => document.getElementById('tf-pct'),
+    status: () => document.getElementById('tf-status'),
+    continueBtn: () => document.getElementById('tf-continue')
+  };
 
   function updateBar() {
     const total = Math.max(tasks.size, 1);
     const pct = Math.floor((state.done / total) * 100);
-    const fill = document.getElementById('tf-fill');
-    const pctEl = document.getElementById('tf-pct');
-    if (fill && pctEl) {
-      fill.style.width = `${pct}%`;
-      pctEl.textContent = `${pct}%`;
-    }
+    const fill = ui.fill(); const pctEl = ui.pct();
+    if (fill && pctEl) { fill.style.width = `${pct}%`; pctEl.textContent = `${pct}%`; }
   }
-  function setStatus(text) {
-    const s = document.getElementById('tf-status');
-    if (s) s.textContent = text;
+  function setStatus(text) { const s = ui.status(); if (s) s.textContent = text; }
+
+  function enableContinue(label='Continue', onClick) {
+    const b = ui.continueBtn(); if (!b) return;
+    b.textContent = label; b.disabled = false;
+    b.onclick = onClick;
   }
+  function fadeOutAndRemove() {
+    el.classList.add('hidden');
+    setTimeout(() => { el.remove(); }, 600);
+  }
+
   function finalize(success) {
-    const fill = document.getElementById('tf-fill');
+    const fill = ui.fill();
     if (fill) fill.classList.toggle('bad', !success);
-    setStatus(success ? 'Loaded • All systems nominal' : 'Failed • See debugger for details');
+
     if (success) {
-      write('OK', 'All tasks complete. Fading to app.');
-      setTimeout(() => { el.classList.add('hidden'); }, 180);
-      setTimeout(() => { el.remove(); }, 600);
+      setStatus('Loaded • Tap Continue');
+      write('OK', 'All tasks complete. Awaiting user confirmation.');
+      enableContinue('Continue', () => {
+        write('OK', 'User confirmed. Entering app.');
+        window.dispatchEvent(new CustomEvent('app:launch')); // optional hook
+        fadeOutAndRemove();
+      });
     } else {
+      setStatus('Failed • See debugger for details');
       write('ERR', 'Loader halted due to errors.');
+      enableContinue('Reload', () => location.reload());
     }
   }
 
@@ -151,7 +167,7 @@
       t.state='done'; state.done++; updateBar();
       write('OK', `✓ ${t.label}${note ? ' — '+note : ''}`);
       if (state.done === tasks.size && state.failed===0) {
-        // small grace period; more tasks might register right after imports
+        // No auto-fade; require user to press Continue
         clearTimeout(this._idle);
         this._idle = setTimeout(() => finalize(true), 120);
       }
@@ -168,23 +184,23 @@
     log(level, msg) { write(level, msg); },
     summary() { return logBuffer.join('\n'); }
   };
-  window.AppLoader = AppLoader; // expose for other modules
+  window.AppLoader = AppLoader;
 
-  // Copy & Hide buttons
+  // Buttons
   document.getElementById('tf-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(AppLoader.summary()); setStatus('Logs copied'); }
     catch { setStatus('Copy failed'); }
   });
   document.getElementById('tf-hide').addEventListener('click', () => el.classList.toggle('hidden'));
+  // Continue button is wired dynamically by finalize()
 
   // ---- Wire initial tasks ---------------------------------------------------
   AppLoader.register('phonebook', 'Loading phonebook (Three.js & addons)');
-  // The index.html entry will dispatch this once imports succeed.
-  window.addEventListener('app:ready', (e) => {
+  window.addEventListener('app:ready', () => {
     AppLoader.complete('phonebook', `modules: ${Object.keys(window.Phonebook||{}).join(', ')}`);
   });
 
-  // Allow other parts of the app to register/complete tasks via events
+  // External task events
   window.addEventListener('tf:task:register', (ev) => {
     const { id, label } = ev.detail || {};
     if (id && label) AppLoader.register(id, label);
@@ -198,7 +214,7 @@
     if (id) AppLoader.fail(id, error || 'Unknown failure');
   });
 
-  // Log basic boot milestones
+  // Boot logs
   write('INFO', 'Loader online.');
   write('INFO', 'Awaiting modules…');
 })();
