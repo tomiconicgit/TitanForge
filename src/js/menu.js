@@ -12,14 +12,14 @@
             #tf-menu-container {
                 position: fixed;
                 /* --- FINAL POSITIONING --- */
-                bottom: 500px;
-                left: 500px;
+                bottom: 727px;
+                left: 16px;
                 z-index: 20;
             }
             #tf-menu-button {
                 /* --- FINAL SIZING --- */
                 font-size: 14px;
-                padding: 6px 23px;
+                padding: 5px 21px;
                 font-weight: 600;
                 border-radius: 20px;
                 border: none;
