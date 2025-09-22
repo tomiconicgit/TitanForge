@@ -77,8 +77,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     controls.minDistance = 1.2;
     controls.maxDistance = 12;
 
-    // Lighting â hemisphere + gentle three-point rig (UNCHANGED)
-    const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x1a2530, 0.8);
+    // Lighting â hemisphere + gentle three-point rig
+    const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x1a2530, 1.5); // Increased intensity from 0.8
     scene.add(hemi);
 
     const key = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -88,7 +88,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     key.shadow.radius = 3;
     scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xbfd6ff, 0.7);
+    const fill = new THREE.DirectionalLight(0xbfd6ff, 0.9); // Increased intensity from 0.7
     fill.position.set(-6, 5, -4);
     scene.add(fill);
 
