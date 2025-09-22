@@ -13,29 +13,32 @@
         style.textContent = `
             #tf-rig-toggle {
                 position: fixed;
-                /* --- CORRECTED POSITIONING --- */
-                bottom: calc(50vh + 16px); /* 16px above the viewer's bottom edge */
+                /* --- ADJUSTED POSITIONING --- */
+                bottom: calc(50vh + 8px); /* 8px above the navigation bar's top edge */
                 left: 16px;
                 z-index: 20;
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                /* --- ADJUSTED SIZING --- */
+                gap: 8px;
+                padding: 6px 10px;
+                border-radius: 16px;
                 background: rgba(28, 32, 38, 0.9);
-                padding: 8px 12px;
-                border-radius: 20px;
                 border: 1px solid rgba(255,255,255,0.1);
             }
             #tf-rig-toggle label {
                 color: #a0a7b0;
-                font-size: 14px;
+                /* --- ADJUSTED SIZING --- */
+                font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
             }
+            /* --- ADJUSTED SIZING --- */
             .tf-switch {
                 position: relative;
                 display: inline-block;
-                width: 34px;
-                height: 20px;
+                width: 30px;
+                height: 16px;
             }
             .tf-switch input { display: none; }
             .tf-slider {
@@ -44,15 +47,15 @@
                 inset: 0;
                 background-color: rgba(255,255,255,0.2);
                 transition: .4s;
-                border-radius: 20px;
+                border-radius: 16px;
             }
             .tf-slider:before {
                 position: absolute;
                 content: "";
-                height: 14px;
-                width: 14px;
-                left: 3px;
-                bottom: 3px;
+                height: 12px;
+                width: 12px;
+                left: 2px;
+                bottom: 2px;
                 background-color: white;
                 transition: .4s;
                 border-radius: 50%;
@@ -82,7 +85,6 @@
     function destroyRigVisual() {
         if (skeletonHelper) {
             window.Viewer.remove(skeletonHelper);
-            // SkeletonHelper does not need manual disposal of geometry/material
             skeletonHelper = null;
         }
     }
@@ -90,7 +92,6 @@
     function createRigVisual() {
         destroyRigVisual(); // Clean up any existing helper first
         if (!activeAsset || !activeAsset.object) {
-            console.log('No active asset with a rig to display.');
             return;
         }
         
@@ -111,14 +112,12 @@
 
     function handleAssetActivated(event) {
         activeAsset = event.detail;
-        // If the toggle is already on, update the rig to the new model
         if (isVisible) {
             createRigVisual();
         }
     }
     
     function handleAssetCleaned(event) {
-        // If the asset being cleaned is the active one, remove its rig
         if (activeAsset && activeAsset.id === event.detail.id) {
             activeAsset = null;
             destroyRigVisual();
@@ -130,10 +129,7 @@
         
         injectUI();
 
-        // Listen for UI interaction
         document.getElementById('rig-toggle-checkbox').addEventListener('change', handleToggle);
-
-        // Listen for global app events
         App.on('asset:activated', handleAssetActivated);
         App.on('asset:cleaned', handleAssetCleaned);
 
