@@ -13,7 +13,8 @@
         style.textContent = `
             #tf-rig-toggle {
                 position: fixed;
-                bottom: 16px;
+                /* --- CORRECTED POSITIONING --- */
+                bottom: calc(50vh + 16px); /* 16px above the viewer's bottom edge */
                 left: 16px;
                 z-index: 20;
                 display: flex;
