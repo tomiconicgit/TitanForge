@@ -84,6 +84,7 @@
                 background: rgba(0,0,0,0.3);
                 border: 1px solid #555;
                 color: #fff; border-radius: 5px; font-size: 15px;
+                box-sizing: border-box; /* **FIX**: Include padding and border in the element's total width */
             }
             .tf-rename-modal-content .buttons { display: flex; gap: 10px; }
             .tf-rename-modal-content button {
