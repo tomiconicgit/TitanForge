@@ -33,6 +33,7 @@
                 flex-direction: column;
                 opacity: 0;
                 transform: translateY(10px);
+                pointer-events: none;
                 transition: opacity 0.2s ease, transform 0.2s ease;
             }
             #tf-animation-panel.show {
@@ -65,6 +66,31 @@
                  background: #c62828; border: none; color: #fff;
                  padding: 8px; border-radius: 5px; cursor: pointer; font-weight: 600;
             }
+
+            /* --- ADDED: Self-contained toggle switch styles --- */
+            .tf-toggle-row {
+                display: flex; align-items: center; justify-content: space-between;
+                color: #e6eef6; font-size: 15px;
+            }
+            .tf-switch {
+                position: relative; display: inline-block;
+                width: 30px; height: 16px; flex-shrink: 0;
+            }
+            .tf-switch input { display: none; }
+            .tf-slider {
+                position: absolute; cursor: pointer; inset: 0;
+                background-color: rgba(255,255,255,0.2);
+                transition: .4s; border-radius: 16px;
+            }
+            .tf-slider:before {
+                position: absolute; content: "";
+                height: 12px; width: 12px;
+                left: 2px; bottom: 2px;
+                background-color: white;
+                transition: .4s; border-radius: 50%;
+            }
+            input:checked + .tf-slider { background-color: #00c853; }
+            input:checked + .tf-slider:before { transform: translateX(14px); }
         `;
         document.head.appendChild(style);
 
@@ -147,7 +173,7 @@
         action = null;
         stopAnimationLoop();
         showPanel(false);
-        showPanelBtn.disabled = true;
+        if (showPanelBtn) showPanelBtn.disabled = true;
     }
 
     function loadAnimation(file) {
@@ -205,7 +231,6 @@
         
         injectUI();
 
-        // Listen for main model asset
         App.on('asset:loaded', e => { if(e.detail?.isMainModel) mainModel = e.detail; });
         App.on('asset:cleaned', e => {
             if(mainModel && mainModel.id === e.detail.id) {
@@ -214,7 +239,6 @@
             }
         });
         
-        // Modal buttons
         loadAnimBtn.addEventListener('click', () => {
             showModal(false);
             fileInput.click();
@@ -225,14 +249,12 @@
         });
         modal.addEventListener('click', e => { if(e.target === modal) showModal(false); });
         
-        // File input
         fileInput.addEventListener('change', e => {
             const file = e.target.files[0];
             if (file) loadAnimation(file);
-            fileInput.value = ''; // Reset
+            fileInput.value = '';
         });
 
-        // Floating panel controls
         panel.querySelector('.minimize-btn').addEventListener('click', () => showPanel(false));
         panel.querySelector('#tf-anim-clear-btn').addEventListener('click', clearAnimation);
         
