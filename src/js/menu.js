@@ -110,6 +110,8 @@
                 // **UPDATED LOGIC HERE**
                 if (action === 'load-model') {
                     window.ModelManager?.load();
+                } else if (action === 'load-asset') {
+                    window.AssetManager?.load();
                 } else {
                     bus.dispatchEvent(new CustomEvent('action', { detail: { action } }));
                     console.log(`Menu action: ${action}`);
