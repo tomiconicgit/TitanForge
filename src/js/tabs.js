@@ -23,7 +23,6 @@
             }
             #tf-tabs-panel.show { display: block; }
             .tf-tab-card {
-                position: relative; /* For positioning the close button */
                 background: rgba(255,255,255,0.05);
                 border-radius: 8px;
                 padding: 12px;
@@ -35,28 +34,32 @@
             .tf-tab-card:hover { background-color: rgba(255,255,255,0.1); }
             .tf-tab-card .card-header {
                 font-weight: 600; margin-bottom: 8px; word-break: break-all;
-                padding-right: 25px; /* Space for the close button */
              }
             .tf-tab-card .card-grid {
                 display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
                 gap: 8px; font-size: 13px; color: #a0a7b0;
+                margin-bottom: 12px; /* Space above the new close button */
             }
             .tf-tab-card .card-grid strong { color: #e6eef6; }
+
+            /* --- UPDATED BUTTON STYLE --- */
             .card-close-btn {
-                position: absolute;
-                top: 8px; right: 8px;
-                width: 20px; height: 20px;
-                background: rgba(0,0,0,0.3);
-                border: 1px solid rgba(255,255,255,0.1);
-                border-radius: 50%;
-                color: #fff;
+                display: block;
+                width: 100%;
+                padding: 8px 16px;
                 font-size: 14px;
-                line-height: 18px;
-                text-align: center;
+                font-weight: 600;
+                border-radius: 15px;
+                border: none;
+                background: linear-gradient(90deg, #c62828, #ff3b30); /* Red gradient */
+                color: #fff;
                 cursor: pointer;
-                transition: background-color 0.2s ease;
+                text-align: center;
+                transition: all 0.2s ease;
             }
-            .card-close-btn:hover { background-color: #ff3b30; }
+            .card-close-btn:hover {
+                opacity: 0.85;
+            }
         `;
         document.head.appendChild(style);
 
@@ -74,8 +77,8 @@
             const card = document.createElement('div');
             card.className = 'tf-tab-card';
             card.dataset.assetId = id;
+            // ** UPDATED card.innerHTML **
             card.innerHTML = `
-                <button class="card-close-btn">&times;</button>
                 <div class="card-header">${asset.name}</div>
                 <div class="card-grid">
                     <div>Type: <strong>${asset.fileType}</strong></div>
@@ -83,6 +86,7 @@
                     <div>Verts: <strong>${asset.vertices.toLocaleString()}</strong></div>
                     <div>Polys: <strong>${asset.polygons.toLocaleString()}</strong></div>
                 </div>
+                <button class="card-close-btn">Close</button>
             `;
             listContainer.appendChild(card);
         }
