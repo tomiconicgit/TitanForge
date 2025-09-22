@@ -48,11 +48,13 @@
       /* Texture Button Grid */
       #tf-texture-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr); /* <-- UPDATED FOR 2x3 LAYOUT */
+        grid-template-columns: repeat(2, 1fr);
         gap: 10px;
+        margin-top: 15px; /* <-- ADDED: Pushes the grid down */
       }
       .tf-texture-btn {
-        padding: 12px 8px; border-radius: 6px; border: none;
+        padding: 15px 8px; /* <-- UPDATED: Increased vertical padding */
+        border-radius: 6px; border: none;
         background: rgba(255,255,255,0.08);
         color: #fff; font-size: 13px; font-weight: 500;
         cursor: pointer; transition: background-color 0.2s ease;
