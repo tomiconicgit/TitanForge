@@ -9,8 +9,7 @@
 
     const elementsToControl = {
         '-- Select Element --': null,
-        'Rig Toggle': '#tf-rig-toggle',
-        'Hide Toggle': '#tf-hide-toggle',
+        'Toggles Container': '#tf-toggles-container',
         'Menu Button': '#tf-menu-container' // We target the container for position
     };
 
@@ -54,7 +53,6 @@
         const selectOptions = Object.keys(elementsToControl)
             .map(name => `<option value="${elementsToControl[name]}">${name}</option>`).join('');
 
-        // **UPDATED**: Renamed sliders
         panel.innerHTML = `
             <div class="dev-header">
                 <h3>UI Positioner</h3>
@@ -101,14 +99,13 @@
     }
 
     function getStyleTarget(mainTarget) {
-        // **FIXED**: Logic to get the correct element for STYLING vs POSITIONING
         // For the Menu, we position the container but style the button inside.
         if (mainTarget && mainTarget.id === 'tf-menu-container') {
             return mainTarget.querySelector('#tf-menu-button');
         }
-        // For the toggles, the container is positioned but the text label is styled.
-        if (mainTarget && (mainTarget.id === 'tf-rig-toggle' || mainTarget.id === 'tf-hide-toggle')) {
-            return mainTarget.querySelector('label:first-child');
+        // For the Toggles, we position the container but style the button inside.
+        if (mainTarget && mainTarget.id === 'tf-toggles-container') {
+            return mainTarget.querySelector('#tf-toggles-button');
         }
         return mainTarget;
     }
