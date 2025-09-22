@@ -102,6 +102,7 @@
         await this.import('navigation', './js/navigation.js');
         await this.import('menu', './js/menu.js');
         await this.import('modelManager', './js/model.js');
+        await this.import('assetManager', './js/asset.js');
         await this.import('tabs', './js/tabs.js');
         await this.import('cleaner', './js/cleaner.js');
 
