@@ -11,13 +11,15 @@
         style.textContent = `
             #tf-menu-container {
                 position: fixed;
-                top: 16px;
-                left: 16px;
+                /* --- FINAL POSITIONING --- */
+                bottom: 500px;
+                left: 500px;
                 z-index: 20;
             }
             #tf-menu-button {
-                padding: 10px 20px;
-                font-size: 15px;
+                /* --- FINAL SIZING --- */
+                font-size: 14px;
+                padding: 6px 23px;
                 font-weight: 600;
                 border-radius: 20px;
                 border: none;
@@ -107,7 +109,6 @@
             if (target.matches('.tf-menu-item')) {
                 const action = target.dataset.action;
                 
-                // **UPDATED LOGIC HERE**
                 if (action === 'load-model') {
                     window.ModelManager?.load();
                 } else if (action === 'load-asset') {
