@@ -7,7 +7,6 @@
     let skeletonHelper = null;
     let isVisible = false;
 
-    // --- UI Injection ---
     function injectUI() {
         const style = document.createElement('style');
         style.textContent = `
@@ -17,7 +16,6 @@
                 bottom: 383px;
                 left: 16px;
                 padding: 6px 10px;
-                /* ---------------------------------- */
                 z-index: 20;
                 display: flex;
                 align-items: center;
@@ -30,7 +28,7 @@
             }
             #tf-rig-toggle label {
                 color: #a0a7b0;
-                /* --- FINAL SIZING --- */
+                /* --- FINAL FONT SIZING --- */
                 font-size: 16px;
                 font-weight: 500;
                 cursor: pointer;
@@ -83,7 +81,6 @@
         document.getElementById('app')?.appendChild(container);
     }
 
-    // --- Core Logic ---
     function destroyRigVisual() {
         if (skeletonHelper) {
             window.Viewer.remove(skeletonHelper);
@@ -93,16 +90,13 @@
 
     function createRigVisual() {
         destroyRigVisual();
-        if (!activeAsset || !activeAsset.object) {
-            return;
-        }
+        if (!activeAsset || !activeAsset.object) { return; }
         
         const { THREE } = window.Phonebook;
         skeletonHelper = new THREE.SkeletonHelper(activeAsset.object);
         window.Viewer.add(skeletonHelper);
     }
 
-    // --- Event Handlers ---
     function handleToggle(event) {
         isVisible = event.target.checked;
         if (isVisible) {
@@ -130,7 +124,6 @@
         if (window.Rig) return;
         
         injectUI();
-
         document.getElementById('rig-toggle-checkbox').addEventListener('change', handleToggle);
         App.on('asset:activated', handleAssetActivated);
         App.on('asset:cleaned', handleAssetCleaned);
