@@ -10,7 +10,7 @@
         style.textContent = `
             #tf-menu-container {
                 position: fixed;
-                top: 16px; /* MOVED from bottom to top */
+                top: 16px; 
                 left: 16px;
                 z-index: 30;
                 border-radius: 20px;
@@ -25,12 +25,11 @@
                 width: 80px;
                 height: 30px;
             }
-            /* --- UPDATED CARD STYLES --- */
             #tf-menu-container.open {
                 width: 200px;
                 height: 155px;
                 cursor: default;
-                border-radius: 8px; /* Consistent with other cards */
+                border-radius: 8px;
                 background: rgba(28, 32, 38, 0.9);
                 backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -53,10 +52,10 @@
             .tf-menu-options {
                 position: absolute;
                 inset: 0;
-                padding: 8px; /* Adjusted padding */
+                padding: 8px;
                 display: flex;
                 flex-direction: column;
-                gap: 0; /* Let borders handle spacing */
+                gap: 0;
                 opacity: 0;
                 transform: scale(0.95);
                 transition: opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s;
@@ -67,8 +66,7 @@
                 transform: scale(1);
                 pointer-events: auto;
             }
-            /* --- UPDATED BUTTON STYLES (like list items) --- */
-            .tf-menu-options button {
+            .tf-menu-options button, .tf-load-modal-content button {
                 width: 100%;
                 padding: 10px 12px;
                 font-size: 15px;
@@ -96,16 +94,9 @@
                 border: 1px solid rgba(255,255,255,0.1);
             }
              .tf-load-modal-content button {
-                width: 100%;
-                padding: 12px;
-                font-size: 15px;
+                text-align: center;
                 font-weight: 600;
-                border: none;
-                border-radius: 8px;
                 background-color: rgba(255, 255, 255, 0.1);
-                color: #fff;
-                cursor: pointer;
-                transition: background-color 0.2s ease;
             }
         `;
         document.head.appendChild(style);
@@ -137,22 +128,27 @@
     function showLoadModal(show) { loadModal.classList.toggle('show', show); }
 
     function wireEvents() {
+        // --- REVISED EVENT LOGIC ---
+        
+        // Handles opening the menu, or closing it by clicking its background
         menuContainer.addEventListener('click', (event) => {
-            if (!menuContainer.classList.contains('open')) {
-                event.stopPropagation();
-                toggleMenu(true);
+            if (event.target.closest('.tf-menu-options')) {
+                return; // Clicks on options are handled by the listener below
             }
+            toggleMenu(!menuContainer.classList.contains('open'));
         });
 
+        // Handles actions within the menu
         const options = menuContainer.querySelector('.tf-menu-options');
         options.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevents the container's listener from firing
             const action = event.target.dataset.action;
             if (!action) return;
 
-            toggleMenu(false);
+            toggleMenu(false); // Always close menu after an action
             
             if (action === 'load') {
-                setTimeout(() => showLoadModal(true), 400);
+                setTimeout(() => showLoadModal(true), 400); // Wait for menu to close
             } else if (action === 'toggles') {
                 window.Toggles?.show();
             } else if (action === 'save') {
@@ -160,6 +156,7 @@
             }
         });
 
+        // Handles the "Load Model/Asset" modal
         loadModal.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (action === 'load-model') {
@@ -168,11 +165,12 @@
             } else if (action === 'load-asset') {
                 showLoadModal(false);
                 window.AssetManager?.load();
-            } else if (event.target === loadModal) {
+            } else if (event.target === loadModal) { // Click on overlay
                 showLoadModal(false);
             }
         });
 
+        // Handles closing the menu by clicking anywhere else on the page
         window.addEventListener('click', (event) => {
             if (menuContainer.classList.contains('open') && !menuContainer.contains(event.target)) {
                 toggleMenu(false);
