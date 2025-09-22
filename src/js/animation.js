@@ -39,6 +39,7 @@
                 display: flex;
                 opacity: 1;
                 transform: translateY(0);
+                pointer-events: auto;
             }
             #tf-animation-panel .panel-header {
                 display: flex; justify-content: space-between; align-items: center;
@@ -147,8 +148,6 @@
         stopAnimationLoop();
         showPanel(false);
         showPanelBtn.disabled = true;
-        // Restore model to its default pose (T-pose)
-        if(mainModel) mainModel.object.pose();
     }
 
     function loadAnimation(file) {
