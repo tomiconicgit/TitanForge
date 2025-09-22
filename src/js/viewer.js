@@ -174,10 +174,22 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     }
   }
 
-// at the end of viewer.js
-window.addEventListener('app:booted', bootstrap);
+  // Logic to initialize the viewer once the main app is ready.
+  const initViewer = () => {
+    // A simple guard to prevent the viewer from ever initializing more than once.
+    // It checks if the `window.Viewer` API, created inside bootstrap, already exists.
+    if (window.Viewer) return;
+    bootstrap();
+  };
 
-// NEW: late-load safety — if boot already happened, mount now
-if (window.App && window.App.glVersion) {
-  bootstrap();
-}
+  // If the app director has already booted by the time this script runs,
+  // we should initialize the viewer immediately.
+  if (window.App && window.App.glVersion) {
+    initViewer();
+  }
+  // Otherwise, we listen on the App's private event bus for the 'app:booted'
+  // signal to start. The `App.on` method is the correct way to do this.
+  else {
+    window.App?.on('app:booted', initViewer);
+  }
+})();
