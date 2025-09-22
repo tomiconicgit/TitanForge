@@ -107,6 +107,7 @@
         await this.import('cleaner', './js/cleaner.js');
         await this.import('rig', './js/rig.js');
         await this.import('hide', './js/hide.js');
+        await this.import('toggles', './js/toggles.js');
         await this.import('developer', './js/developer.js');
 
 
