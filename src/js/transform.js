@@ -4,6 +4,7 @@
     'use strict';
 
     let panel, activeAsset, mainModel, boneModal;
+    let waitingMessage, controlsContainer;
     let sliders = {};
     let boneAttachBtn, boneList;
 
@@ -13,19 +14,24 @@
         style.textContent = `
             #tf-transform-panel {
                 position: fixed;
-                top: calc(50vh + 54px); /* Below viewer and nav bar */
+                top: calc(50vh + 54px);
                 left: 0; right: 0; bottom: 0;
                 background: #0D1014;
                 z-index: 5;
                 padding: 16px;
                 box-sizing: border-box;
                 overflow-y: auto;
-                display: none; /* Hidden by default */
+                display: none;
             }
-            #tf-transform-panel.show { display: block; }
-            .tf-slider-group {
-                margin-bottom: 16px;
+            #tf-transform-panel.show { display: flex; align-items: center; justify-content: center; }
+            #tf-transform-waiting {
+                color: #a0a7b0;
+                font-size: 16px;
             }
+            #tf-transform-controls {
+                width: 100%;
+            }
+            .tf-slider-group { margin-bottom: 16px; }
             .tf-slider-group label {
                 display: block;
                 color: #a0a7b0;
@@ -41,9 +47,7 @@
                 outline: none;
                 transition: background 0.2s ease;
             }
-            .tf-slider-group input[type=range]:hover {
-                 background: rgba(255,255,255,0.2);
-            }
+            .tf-slider-group input[type=range]:hover { background: rgba(255,255,255,0.2); }
             .tf-slider-group input[type=range]::-webkit-slider-thumb {
                 -webkit-appearance: none;
                 appearance: none;
@@ -54,9 +58,7 @@
                 border-radius: 50%;
                 border: 2px solid #fff;
             }
-            #tf-bone-attach-section {
-                margin-bottom: 20px;
-            }
+            #tf-bone-attach-section { margin-bottom: 20px; }
             #tf-bone-attach-btn {
                 width: 100%;
                 padding: 10px;
@@ -69,10 +71,7 @@
                 cursor: pointer;
                 text-align: center;
             }
-             #tf-bone-attach-btn:hover {
-                background: rgba(255,255,255,0.15);
-             }
-            /* --- NEW: Bone Modal Styles --- */
+            #tf-bone-attach-btn:hover { background: rgba(255,255,255,0.15); }
             .tf-bone-modal-content {
                 width: min(400px, 90vw); padding: 20px;
                 background: rgba(28, 32, 38, 0.95); border-radius: 12px;
@@ -84,10 +83,7 @@
                 font-size: 18px; font-weight: 600; text-align: center;
                 padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
             }
-            .tf-bone-modal-list-container {
-                max-height: 50vh;
-                overflow-y: auto;
-            }
+            .tf-bone-modal-list-container { max-height: 50vh; overflow-y: auto; }
             .tf-bone-item {
                 padding: 10px 12px;
                 color: #e6eef6;
@@ -100,39 +96,40 @@
         `;
         document.head.appendChild(style);
 
-        // Main transform panel UI
         panel = document.createElement('div');
         panel.id = 'tf-transform-panel';
         panel.innerHTML = `
-            <div id="tf-bone-attach-section" style="display: none;">
-                <button id="tf-bone-attach-btn">Attach to Bone...</button>
-            </div>
-            <div class="tf-slider-group">
-                <label for="pos-x">Position X</label>
-                <input type="range" id="pos-x" min="-5" max="5" value="0" step="0.01">
-            </div>
-             <div class="tf-slider-group">
-                <label for="pos-y">Position Y</label>
-                <input type="range" id="pos-y" min="-5" max="5" value="0" step="0.01">
-            </div>
-            <div class="tf-slider-group">
-                <label for="scale">Scale</label>
-                <input type="range" id="scale" min="0.1" max="3" value="1" step="0.01">
-            </div>
-             <div class="tf-slider-group">
-                <label for="rot-y">Rotation</label>
-                <input type="range" id="rot-y" min="-3.14" max="3.14" value="0" step="0.01">
-            </div>
-             <div class="tf-slider-group">
-                <label for="rot-x">Tilt</label>
-                <input type="range" id="rot-x" min="-1.57" max="1.57" value="0" step="0.01">
+            <div id="tf-transform-waiting">Load a model to begin transforming.</div>
+            <div id="tf-transform-controls" style="display: none;">
+                <div id="tf-bone-attach-section" style="display: none;">
+                    <button id="tf-bone-attach-btn">Attach to Bone...</button>
+                </div>
+                <div class="tf-slider-group">
+                    <label for="pos-x">Position X</label>
+                    <input type="range" id="pos-x" min="-5" max="5" value="0" step="0.01">
+                </div>
+                <div class="tf-slider-group">
+                    <label for="pos-y">Position Y</label>
+                    <input type="range" id="pos-y" min="-5" max="5" value="0" step="0.01">
+                </div>
+                <div class="tf-slider-group">
+                    <label for="scale">Scale</label>
+                    <input type="range" id="scale" min="0.1" max="3" value="1" step="0.01">
+                </div>
+                <div class="tf-slider-group">
+                    <label for="rot-y">Rotation</label>
+                    <input type="range" id="rot-y" min="-3.14" max="3.14" value="0" step="0.01">
+                </div>
+                <div class="tf-slider-group">
+                    <label for="rot-x">Tilt</label>
+                    <input type="range" id="rot-x" min="-1.57" max="1.57" value="0" step="0.01">
+                </div>
             </div>
         `;
         document.getElementById('app')?.appendChild(panel);
 
-        // New Bone Selection Modal UI
         boneModal = document.createElement('div');
-        boneModal.className = 'tf-modal-overlay'; // Reuse existing overlay style
+        boneModal.className = 'tf-modal-overlay';
         boneModal.innerHTML = `
             <div class="tf-bone-modal-content">
                 <div class="title">Select a Bone</div>
@@ -143,6 +140,8 @@
         `;
         document.body.appendChild(boneModal);
         
+        waitingMessage = panel.querySelector('#tf-transform-waiting');
+        controlsContainer = panel.querySelector('#tf-transform-controls');
         sliders.pos_x = panel.querySelector('#pos-x');
         sliders.pos_y = panel.querySelector('#pos-y');
         sliders.scale = panel.querySelector('#scale');
@@ -152,17 +151,14 @@
         boneList = boneModal.querySelector('#tf-bone-list');
     }
 
-    function showBoneModal(visible) {
-        boneModal.classList.toggle('show', visible);
-    }
+    function showBoneModal(visible) { boneModal.classList.toggle('show', visible); }
 
-    // --- Logic ---
     function syncSlidersToAsset() {
         if (!activeAsset || !activeAsset.object) return;
         const obj = activeAsset.object;
         sliders.pos_x.value = obj.position.x;
         sliders.pos_y.value = obj.position.y;
-        sliders.scale.value = obj.scale.x; // Assumes uniform scale
+        sliders.scale.value = obj.scale.x;
         sliders.rot_y.value = obj.rotation.y;
         sliders.rot_x.value = obj.rotation.x;
     }
@@ -172,7 +168,7 @@
         const showBoneAttach = !!activeAsset && !!mainModel && activeAsset.id !== mainModel.id;
         boneSection.style.display = showBoneAttach ? 'block' : 'none';
         
-        if (showBoneAttach && activeAsset.object.parent && activeAsset.object.parent.isBone) {
+        if (showBoneAttach && activeAsset.object.parent?.isBone) {
              boneAttachBtn.textContent = `Attached to: ${activeAsset.object.parent.name}`;
         } else if (showBoneAttach) {
             boneAttachBtn.textContent = 'Attach to Bone...';
@@ -184,11 +180,8 @@
     function populateBoneList() {
         if (!mainModel) return;
         boneList.innerHTML = '';
-        
         const bones = [];
-        mainModel.object.traverse(obj => {
-            if (obj.isBone) bones.push(obj);
-        });
+        mainModel.object.traverse(obj => { if (obj.isBone) bones.push(obj); });
 
         const detachItem = document.createElement('div');
         detachItem.className = 'tf-bone-item';
@@ -207,29 +200,23 @@
     
     function attachAssetToBone(boneName) {
         if (!activeAsset || !mainModel) return;
-
         if (boneName === 'detach') {
             window.Viewer.scene.attach(activeAsset.object);
-            syncSlidersToAsset();
             boneAttachBtn.textContent = 'Attach to Bone...';
-            return;
+        } else {
+            const targetBone = mainModel.object.getObjectByName(boneName);
+            if (targetBone) {
+                targetBone.attach(activeAsset.object);
+                activeAsset.object.position.set(0, 0, 0);
+                activeAsset.object.rotation.set(0, 0, 0);
+                activeAsset.object.scale.set(1, 1, 1);
+                boneAttachBtn.textContent = `Attached to: ${boneName}`;
+            }
         }
-
-        const targetBone = mainModel.object.getObjectByName(boneName);
-        if (targetBone) {
-            targetBone.attach(activeAsset.object);
-            activeAsset.object.position.set(0, 0, 0);
-            activeAsset.object.rotation.set(0, 0, 0);
-            activeAsset.object.scale.set(1, 1, 1);
-            syncSlidersToAsset();
-            boneAttachBtn.textContent = `Attached to: ${boneName}`;
-        }
+        syncSlidersToAsset();
     }
 
-    // --- Event Handlers ---
-    function handleNavChange(event) {
-        panel.classList.toggle('show', event.detail.tab === 'transform');
-    }
+    function handleNavChange(event) { panel.classList.toggle('show', event.detail.tab === 'transform'); }
     
     function handleAssetLoaded(event) {
         if (mainModel) return;
@@ -245,6 +232,12 @@
     }
 
     function handleAssetActivated(event) {
+        if (waitingMessage.style.display !== 'none') {
+            waitingMessage.style.display = 'none';
+            controlsContainer.style.display = 'block';
+            panel.style.justifyContent = 'flex-start';
+            panel.style.alignItems = 'stretch';
+        }
         activeAsset = event.detail;
         updatePanelForAsset();
     }
@@ -264,32 +257,22 @@
         
         Object.keys(sliders).forEach(key => {
             sliders[key].addEventListener('input', e => {
-                 if (activeAsset && activeAsset.object) {
-                    applyTransforms[key](parseFloat(e.target.value));
-                }
+                 if (activeAsset?.object) applyTransforms[key](parseFloat(e.target.value));
             });
         });
         
-        boneAttachBtn.addEventListener('click', () => {
-            if (mainModel) showBoneModal(true);
-        });
+        boneAttachBtn.addEventListener('click', () => { if (mainModel) showBoneModal(true); });
         
-        boneList.addEventListener('click', (event) => {
-            if (event.target.matches('.tf-bone-item')) {
-                const boneName = event.target.dataset.boneName;
-                attachAssetToBone(boneName);
+        boneList.addEventListener('click', e => {
+            if (e.target.matches('.tf-bone-item')) {
+                attachAssetToBone(e.target.dataset.boneName);
                 showBoneModal(false);
             }
         });
 
-        boneModal.addEventListener('click', (event) => {
-            if (event.target === boneModal) {
-                 showBoneModal(false);
-            }
-        });
+        boneModal.addEventListener('click', e => { if (e.target === boneModal) showBoneModal(false); });
     }
 
-    // --- Bootstrap ---
     function bootstrap() {
         if (window.Transform) return;
         injectUI();
@@ -299,9 +282,6 @@
         window.Debug?.log('Transform Panel ready.');
     }
 
-    if (window.App?.glVersion) {
-        bootstrap();
-    } else {
-        window.App?.on('app:booted', bootstrap);
-    }
+    if (window.App?.glVersion) bootstrap();
+    else window.App?.on('app:booted', bootstrap);
 })();
