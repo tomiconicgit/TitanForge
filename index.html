@@ -32,11 +32,6 @@
       touch-action: none;
     }
     #app { position:fixed; inset:0; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-    #status {
-      position:fixed; left:12px; bottom:12px; opacity:.7; font-size:12px;
-      background:rgba(255,255,255,.06); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-      padding:6px 10px; border-radius:10px;
-    }
   </style>
 
   <script type="importmap">
@@ -50,7 +45,6 @@
 </head>
 <body>
   <div id="app" role="application" aria-label="Wardrobe Tool v2"></div>
-  <div id="status">shell ready</div>
 
   <script src="./debugger.js"></script>
   <script type="module" src="./loading.js"></script>
@@ -70,10 +64,6 @@
     window.dispatchEvent(new CustomEvent('app:ready', { detail: { modules: Object.keys(window.Phonebook) }}));
     console.log('[Wardrobe2] entry loaded:', window.Phonebook);
     if (window.Debug) Debug.log('Phonebook ready: three@0.157.0, OrbitControls, GLTFLoader');
-
-    // Update footer badge
-    const statusEl = document.getElementById('status');
-    if (statusEl) statusEl.textContent = 'phonebook loaded • entry ok';
 
     // complete entry task
     if (window.Debug && Debug.task) Debug.task.done('entry', 'Entry OK');
