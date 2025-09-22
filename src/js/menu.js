@@ -10,7 +10,7 @@
         style.textContent = `
             #tf-menu-container {
                 position: fixed;
-                bottom: 727px;
+                top: 16px; /* MOVED from bottom to top */
                 left: 16px;
                 z-index: 30;
                 border-radius: 20px;
@@ -25,11 +25,12 @@
                 width: 80px;
                 height: 30px;
             }
+            /* --- UPDATED CARD STYLES --- */
             #tf-menu-container.open {
-                width: 220px;
-                height: 180px;
+                width: 200px;
+                height: 155px;
                 cursor: default;
-                border-radius: 12px;
+                border-radius: 8px; /* Consistent with other cards */
                 background: rgba(28, 32, 38, 0.9);
                 backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -52,10 +53,10 @@
             .tf-menu-options {
                 position: absolute;
                 inset: 0;
-                padding: 16px;
+                padding: 8px; /* Adjusted padding */
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
+                gap: 0; /* Let borders handle spacing */
                 opacity: 0;
                 transform: scale(0.95);
                 transition: opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s;
@@ -66,7 +67,35 @@
                 transform: scale(1);
                 pointer-events: auto;
             }
-            .tf-menu-options button, .tf-load-modal-content button {
+            /* --- UPDATED BUTTON STYLES (like list items) --- */
+            .tf-menu-options button {
+                width: 100%;
+                padding: 10px 12px;
+                font-size: 15px;
+                font-weight: 500;
+                border: none;
+                border-radius: 5px;
+                background-color: transparent;
+                color: #e6eef6;
+                cursor: pointer;
+                text-align: left;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                transition: background-color 0.2s ease;
+            }
+             .tf-menu-options button:last-child {
+                border-bottom: none;
+            }
+            .tf-menu-options button:hover, .tf-load-modal-content button:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            .tf-load-modal-content {
+                display: flex; flex-direction: column; gap: 15px;
+                width: min(300px, 80vw);
+                padding: 25px;
+                background: rgba(28, 32, 38, 0.9); border-radius: 12px;
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+             .tf-load-modal-content button {
                 width: 100%;
                 padding: 12px;
                 font-size: 15px;
@@ -77,16 +106,6 @@
                 color: #fff;
                 cursor: pointer;
                 transition: background-color 0.2s ease;
-            }
-            .tf-menu-options button:hover, .tf-load-modal-content button:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-            }
-            .tf-load-modal-content {
-                display: flex; flex-direction: column; gap: 15px;
-                width: min(300px, 80vw);
-                padding: 25px;
-                background: rgba(28, 32, 38, 0.9); border-radius: 12px;
-                border: 1px solid rgba(255,255,255,0.1);
             }
         `;
         document.head.appendChild(style);
