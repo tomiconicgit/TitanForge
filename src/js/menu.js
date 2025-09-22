@@ -8,66 +8,69 @@
     function injectUI() {
         const style = document.createElement('style');
         style.textContent = `
+            /* Main wrapper for positioning */
             #tf-menu-container {
                 position: fixed;
-                top: 16px; 
+                top: 16px;
                 left: 16px;
                 z-index: 30;
+            }
+
+            /* The visible menu button */
+            #tf-menu-button {
+                width: 80px;
+                height: 30px;
                 border-radius: 20px;
                 background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
                 color: #fff;
                 cursor: pointer;
                 box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-                transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-                overflow: hidden;
-            }
-            #tf-menu-container:not(.open) {
-                width: 80px;
-                height: 30px;
-            }
-            #tf-menu-container.open {
-                width: 200px;
-                height: 155px;
-                cursor: default;
-                border-radius: 8px;
-                background: rgba(28, 32, 38, 0.9);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            #tf-menu-button-text {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 100%;
-                height: 100%;
                 font-size: 14px;
                 font-weight: 600;
-                transition: opacity 0.2s ease, transform 0.2s ease;
+                border: none;
+                transition: opacity 0.3s ease, transform 0.3s ease;
             }
-            #tf-menu-container.open #tf-menu-button-text {
-                opacity: 0;
-                transform: scale(0.9);
-                pointer-events: none;
-            }
-            .tf-menu-options {
-                position: absolute;
-                inset: 0;
+
+            /* The menu card, which is hidden by default */
+            #tf-menu-card {
+                width: 200px;
+                border-radius: 8px;
+                background: rgba(28, 32, 38, 0.9);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 padding: 8px;
                 display: flex;
                 flex-direction: column;
                 gap: 0;
+                /* Default hidden state */
                 opacity: 0;
                 transform: scale(0.95);
-                transition: opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s;
-                pointer-events: none; /* Initially not clickable */
+                pointer-events: none;
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                position: absolute; /* Keep it in the same spot as the button */
+                top: 0;
+                left: 0;
             }
-            /* --- NEW CLASS to enable pointer events after animation starts --- */
-            #tf-menu-container.open.interactive .tf-menu-options {
+
+            /* State changes when the wrapper has the '.open' class */
+            #tf-menu-container.open #tf-menu-button {
+                opacity: 0;
+                transform: scale(0.9);
+                pointer-events: none;
+            }
+
+            #tf-menu-container.open #tf-menu-card {
                 opacity: 1;
                 transform: scale(1);
                 pointer-events: auto;
             }
-            .tf-menu-options button, .tf-load-modal-content button {
+            
+            /* Styles for buttons inside the card (largely unchanged) */
+            #tf-menu-card button, .tf-load-modal-content button {
                 width: 100%;
                 padding: 10px 12px;
                 font-size: 15px;
@@ -81,12 +84,14 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.08);
                 transition: background-color 0.2s ease;
             }
-             .tf-menu-options button:last-child {
+            #tf-menu-card button:last-child {
                 border-bottom: none;
             }
-            .tf-menu-options button:hover, .tf-load-modal-content button:hover {
+            #tf-menu-card button:hover, .tf-load-modal-content button:hover {
                 background-color: rgba(255, 255, 255, 0.1);
             }
+
+            /* Modal styles (unchanged) */
             .tf-load-modal-content {
                 display: flex; flex-direction: column; gap: 15px;
                 width: min(300px, 80vw);
@@ -94,7 +99,7 @@
                 background: rgba(28, 32, 38, 0.9); border-radius: 12px;
                 border: 1px solid rgba(255,255,255,0.1);
             }
-             .tf-load-modal-content button {
+            .tf-load-modal-content button {
                 text-align: center;
                 font-weight: 600;
                 background-color: rgba(255, 255, 255, 0.1);
@@ -105,8 +110,8 @@
         menuContainer = document.createElement('div');
         menuContainer.id = 'tf-menu-container';
         menuContainer.innerHTML = `
-            <div id="tf-menu-button-text">Menu</div>
-            <div class="tf-menu-options">
+            <button id="tf-menu-button">Menu</button>
+            <div id="tf-menu-card">
                 <button data-action="load">Load</button>
                 <button data-action="toggles">Toggles</button>
                 <button data-action="save">Save</button>
@@ -126,46 +131,38 @@
     }
 
     function toggleMenu(show) {
-        if (show) {
-            menuContainer.classList.add('open');
-            // After a short delay, make the buttons interactive.
-            // This prevents the same click that opened the menu from triggering a button.
-            setTimeout(() => {
-                if (menuContainer.classList.contains('open')) {
-                     menuContainer.classList.add('interactive');
-                }
-            }, 100);
-        } else {
-            menuContainer.classList.remove('open', 'interactive');
-        }
+        menuContainer.classList.toggle('open', show);
     }
 
     function showLoadModal(show) { loadModal.classList.toggle('show', show); }
 
     function wireEvents() {
-        // Use a single 'click' listener on the container.
-        menuContainer.addEventListener('click', (event) => {
-            // Clicks on buttons inside the options are handled by the next block.
-            // This condition handles clicks on the initial "Menu" button or the expanded card's background.
-            if (!event.target.closest('.tf-menu-options button')) {
-                 toggleMenu(!menuContainer.classList.contains('open'));
-            }
-        });
+        const menuButton = menuContainer.querySelector('#tf-menu-button');
+        const menuCard = menuContainer.querySelector('#tf-menu-card');
         
-        const options = menuContainer.querySelector('.tf-menu-options');
-        options.addEventListener('click', (event) => {
+        // Open the menu when the button is clicked
+        menuButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent this click from being caught by the window listener immediately
+            toggleMenu(true);
+        });
+
+        // Handle actions within the card
+        menuCard.addEventListener('click', (event) => {
             const action = event.target.dataset.action;
             if (!action) return;
 
             toggleMenu(false); // Always close the menu after an action.
             
-            if (action === 'load') {
-                setTimeout(() => showLoadModal(true), 400); // Wait for menu animation.
-            } else if (action === 'toggles') {
-                window.Toggles?.show();
-            } else if (action === 'save') {
-                console.log('Save action triggered.');
-            }
+            // Use a timeout to allow the close animation to start before firing the action
+            setTimeout(() => {
+                if (action === 'load') {
+                    showLoadModal(true);
+                } else if (action === 'toggles') {
+                    window.Toggles?.show();
+                } else if (action === 'save') {
+                    console.log('Save action triggered.');
+                }
+            }, 300); // Duration should match the CSS transition
         });
 
         loadModal.addEventListener('click', (event) => {
@@ -181,9 +178,9 @@
             }
         });
 
-        // Use 'pointerdown' for the global click-off listener for maximum reliability.
-        window.addEventListener('pointerdown', (event) => {
-            if (menuContainer.classList.contains('open') && !menuContainer.contains(event.target)) {
+        // Close the menu if the user clicks anywhere outside of it
+        window.addEventListener('pointerdown', () => {
+            if (menuContainer.classList.contains('open')) {
                 toggleMenu(false);
             }
         });
