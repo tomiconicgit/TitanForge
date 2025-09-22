@@ -45,7 +45,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     // Environment - A large sphere to act as a studio room
     const roomGeo = new THREE.SphereGeometry(100, 64, 32);
     const roomMat = new THREE.MeshStandardMaterial({
-      color: 0x404040, // Changed from 0x08080a to a medium grey
+      color: 0xe8e8e8, // Changed to off-white
       side: THREE.BackSide,
       metalness: 0.1
     });
@@ -98,7 +98,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     // Floor with a visible, dark material
     const floorMat = new THREE.MeshStandardMaterial({
-        color: 0x262626, // Changed from 0x1a1a1a to a lighter dark grey
+        color: 0xd8d8d8, // Changed to a shade darker than the environment
         metalness: 0.2,
         roughness: 0.7
     });
