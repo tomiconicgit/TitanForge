@@ -13,13 +13,13 @@
         style.textContent = `
             #tf-rig-toggle {
                 position: fixed;
-                /* --- ADJUSTED POSITIONING --- */
-                bottom: calc(50vh + 8px); /* 8px above the navigation bar's top edge */
+                /* --- CORRECTED POSITIONING --- */
+                bottom: 50vh;
                 left: 16px;
+                transform: translateY(-8px); /* Moves the toggle 8px above the nav bar */
                 z-index: 20;
                 display: flex;
                 align-items: center;
-                /* --- ADJUSTED SIZING --- */
                 gap: 8px;
                 padding: 6px 10px;
                 border-radius: 16px;
@@ -28,12 +28,10 @@
             }
             #tf-rig-toggle label {
                 color: #a0a7b0;
-                /* --- ADJUSTED SIZING --- */
                 font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
             }
-            /* --- ADJUSTED SIZING --- */
             .tf-switch {
                 position: relative;
                 display: inline-block;
