@@ -105,6 +105,7 @@
         await this.import('assetManager', './js/asset.js');
         await this.import('tabs', './js/tabs.js');
         await this.import('cleaner', './js/cleaner.js');
+        await this.import('rig', './js/rig.js');
 
 
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
