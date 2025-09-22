@@ -1,4 +1,4 @@
-// src/main.js — Director/orchestrator for Titan Forge PWA
+// src/main.js â Director/orchestrator for Titan Forge PWA
 // Centralises boot order and shared utilities.
 
 (() => {
@@ -73,7 +73,7 @@
           const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
           if (!gl) throw new Error('WebGL not available');
           this.glVersion = gl instanceof WebGL2RenderingContext ? 'webgl2' : 'webgl1';
-          Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} • ${this.glVersion}`);
+          Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} â¢ ${this.glVersion}`);
         });
 
         this.addStage('wire:events', 'Wiring global events', async () => {
@@ -100,9 +100,10 @@
         await this.import('hide', './js/hide.js');
         await this.import('toggles', './js/toggles.js');
         await this.import('transform', './js/transform.js');
+        await this.import('meshes', './js/meshes.js'); // **NEW**
         await this.import('developer', './js/developer.js');
 
-        Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
+        Task.done('director', `OK â¢ ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
 
       } catch (e) {
