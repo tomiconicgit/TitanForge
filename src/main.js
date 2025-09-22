@@ -101,7 +101,7 @@
         await this.import('toggles', './js/toggles.js');
         await this.import('transform', './js/transform.js');
         await this.import('meshes', './js/meshes.js');
-        await this.import('textures', './js/textures.js'); // **NEW**
+        await this.import('texture', './js/texture.js'); // **NEW**
         await this.import('developer', './js/developer.js');
 
         Task.done('director', `OK Ã¢ÂÂ¢ ${this.glVersion || 'webgl?'}`);
