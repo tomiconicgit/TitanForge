@@ -30,8 +30,13 @@
                 text-align: center; margin: auto;
             }
             #tf-textures-controls {
-                display: flex; flex-direction: column; gap: 20px;
+                display: none; /* Hidden by default */
+                flex-direction: column; gap: 20px;
             }
+            /* **FIX**: Use a class on the parent panel to control visibility */
+            #tf-textures-panel.has-model #tf-textures-waiting { display: none; }
+            #tf-textures-panel.has-model #tf-textures-controls { display: flex; }
+
             #tf-mesh-select {
                 width: 100%; padding: 10px; font-size: 15px;
                 background: rgba(255,255,255,0.05); color: #fff;
@@ -60,7 +65,7 @@
         panel.id = 'tf-textures-panel';
         panel.innerHTML = `
             <div id="tf-textures-waiting">Load a model to edit textures.</div>
-            <div id="tf-textures-controls" style="display: none;">
+            <div id="tf-textures-controls">
                 <select id="tf-mesh-select"></select>
                 <div class="tf-maps-grid"></div>
             </div>
@@ -84,9 +89,8 @@
     function resetPanel() {
         activeAsset = null;
         selectedMesh = null;
-        controlsContainer.style.display = 'none';
-        waitingMessage.style.display = 'block';
         meshSelect.innerHTML = '';
+        panel.classList.remove('has-model'); // **FIX**: Control visibility via parent class
     }
 
     function updatePanelForAsset() {
@@ -99,11 +103,9 @@
         const meshes = [];
         activeAsset.object.traverse(obj => {
             if (obj.isMesh) {
-                // Ensure the mesh has a material to work with
                 if (!obj.material) {
                     obj.material = new THREE.MeshStandardMaterial();
                 } else if (!obj.material.isMeshStandardMaterial) {
-                    // Attempt to convert simple materials
                     const oldMat = obj.material;
                     obj.material = new THREE.MeshStandardMaterial({ color: oldMat.color, map: oldMat.map });
                     oldMat.dispose();
@@ -112,7 +114,7 @@
             }
         });
 
-        meshSelect.innerHTML = ''; // Clear previous options
+        meshSelect.innerHTML = '';
         if (meshes.length > 0) {
             meshes.forEach((mesh, i) => {
                 const option = document.createElement('option');
@@ -120,10 +122,8 @@
                 option.textContent = mesh.name || `Mesh ${i + 1}`;
                 meshSelect.appendChild(option);
             });
-            // Auto-select the first mesh
             selectedMesh = meshes[0];
-            controlsContainer.style.display = 'flex';
-            waitingMessage.style.display = 'none';
+            panel.classList.add('has-model'); // **FIX**: Control visibility via parent class
         } else {
             resetPanel();
         }
@@ -139,15 +139,13 @@
             textureLoader.load(e.target.result, (texture) => {
                 const config = MAP_CONFIG[mapTypeToLoad];
                 
-                // Configure texture properties for GLB/PBR workflow
                 texture.flipY = false;
                 if (config.colorSpace) {
                     texture.colorSpace = config.colorSpace;
                 }
                 
-                // Apply the texture to the material property
                 selectedMesh.material[config.prop] = texture;
-                selectedMesh.material.needsUpdate = true; // Crucial!
+                selectedMesh.material.needsUpdate = true;
                 
                 console.log(`Applied ${mapTypeToLoad} map to ${selectedMesh.name}`);
             });
@@ -187,7 +185,7 @@
             if (file) {
                 handleTextureFile(file);
             }
-            fileInput.value = ''; // Reset for next selection
+            fileInput.value = '';
         });
     }
 
@@ -207,7 +205,6 @@
         
         injectUI();
         
-        // **FIX**: Create buttons after MAP_CONFIG and the UI container exist.
         Object.keys(MAP_CONFIG).forEach(name => {
             const button = document.createElement('button');
             button.className = 'tf-map-button';
