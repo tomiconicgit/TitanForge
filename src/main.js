@@ -52,7 +52,6 @@
 
     // ---- Safe dynamic import for later modules ------------------------------
     async import(id, path, { optional = false } = {}) {
-      // This will now register a task with the loading screen
       Task.start(`mod:${id}`, `Loading module: ${id}`);
       try {
         const mod = await import(path);
@@ -73,11 +72,9 @@
       Task.start('director', 'Director starting');
 
       try {
-        // Bind phonebook (Three, OrbitControls, GLTFLoader)
         this.phonebook = window.Phonebook || null;
         if (!this.phonebook) throw new Error('Phonebook missing (entry script did not expose modules).');
 
-        // Define minimal, non-visual stages (no 404 risk)
         this.addStage('probe:webgl', 'Probing WebGL capability', async () => {
           const canvas = document.createElement('canvas');
           const gl2 = canvas.getContext('webgl2');
@@ -100,10 +97,13 @@
 
         await this.runStages();
 
-        // Load primary UI modules from the director
+        // **UPDATED**: Load all primary UI and logic modules
         await this.import('viewer', './js/viewer.js');
         await this.import('navigation', './js/navigation.js');
-        await this.import('menu', './js/menu.js'); // **NEW**
+        await this.import('menu', './js/menu.js');
+        await this.import('modelManager', './js/model.js');
+        await this.import('tabs', './js/tabs.js');
+
 
         Task.done('director', `OK • ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
@@ -115,20 +115,16 @@
     }
   };
 
-  // Expose globally for later modules to use
   window.App = App;
 
-  // ---- Start after loader’s Continue (and be robust to different dispatchers)
   const kick = () => window.App.start();
   window.addEventListener('app:launch', kick);
   document.addEventListener('app:launch', kick);
 
-  // Safety: if the loader isn't present (or already removed), auto-start
   if (!document.getElementById('tf-loader')) {
     setTimeout(() => { if (!App._started) App.start(); }, 0);
   }
 
-  // Helpful log while idle
   if (document.readyState !== 'loading') {
     Task.log('Director loaded; waiting for app:launch (press Continue). You can also call App.start() manually.');
   } else {
