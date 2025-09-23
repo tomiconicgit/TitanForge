@@ -106,7 +106,14 @@
                 let triangleCount = 0;
 
                 sanitizeMaterials(asset);
-                centerAndGroundModel(asset);
+                
+                // --- MODIFICATION START ---
+                // Check if the asset has a baked-in position. If so, ask the user what to do.
+                const hasPosition = asset.position.lengthSq() > 0.0001;
+                if (!hasPosition || confirm('This asset has a saved position. Do you want to auto-center it at the origin?\n\n(Click OK to center, or Cancel to keep its position).')) {
+                    centerAndGroundModel(asset);
+                }
+                // --- MODIFICATION END ---
 
                 asset.traverse(obj => {
                     if (obj.isMesh) {
