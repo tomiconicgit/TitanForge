@@ -96,6 +96,7 @@
         await this.import('tabs', './js/tabs.js');
         await this.import('cleaner', './js/cleaner.js');
         await this.import('copy', './js/copy.js');
+        await this.import('export', './js/export.js');
         await this.import('animation', './js/animation.js');
         await this.import('rig', './js/rig.js');
         await this.import('hide', './js/hide.js');
