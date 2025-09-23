@@ -99,7 +99,7 @@
   el.innerHTML = `
     <div class="tf-logo-container">
       <div class="tf-logo-text">Titan Forge</div>
-      <div class="tf-logo-subtext">Wardrobe Tool</div>
+      <div class="tf-logo-subtext">Mobile Model Editor</div>
     </div>
     <div id="tf-state-container">
       <div class="tf-spinner" id="tf-spinner"></div>
