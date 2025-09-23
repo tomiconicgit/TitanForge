@@ -37,10 +37,10 @@
             #tf-removerig-preview {
                 width: 100%; height: 250px; border-radius: 8px;
                 background: #111418; border: 1px solid rgba(255,255,255,0.1);
-                overflow: hidden; /* Ensures canvas doesn't bleed out */
+                overflow: hidden;
             }
             .tf-removerig-progress-area {
-                display: none; /* Hidden by default */
+                display: none;
                 flex-direction: column; gap: 10px;
             }
             .tf-removerig-progress-bar {
@@ -80,7 +80,6 @@
         `;
         document.body.appendChild(modal);
 
-        // --- Element References ---
         removeBtn = document.getElementById('tf-removerig-btn');
         completeBtn = document.getElementById('tf-removerig-complete-btn');
         progressBar = modal.querySelector('.tf-removerig-progress-area');
@@ -88,17 +87,14 @@
         statusText = modal.querySelector('.tf-removerig-status-text');
     }
     
-    // --- 3D Preview ---
     function initPreview() {
         const container = document.getElementById('tf-removerig-preview');
         if (!container || previewRenderer) return;
-
         const { THREE } = window.Phonebook;
+
         previewScene = new THREE.Scene();
         previewScene.background = new THREE.Color('#111418');
-        
         previewCamera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
-        
         previewScene.add(new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.0));
         previewScene.add(new THREE.AmbientLight(0x404040, 1.0));
         
@@ -110,71 +106,55 @@
     
     function startPreviewAnimation() {
         if (previewRafId) cancelAnimationFrame(previewRafId);
-        function animate() {
+        const animate = () => {
             if (previewClone) previewClone.rotation.y += 0.005;
             previewRenderer.render(previewScene, previewCamera);
             previewRafId = requestAnimationFrame(animate);
-        }
+        };
         animate();
     }
 
     function stopPreviewAnimation() {
-        if (previewRafId) {
-            cancelAnimationFrame(previewRafId);
-            previewRafId = null;
-        }
+        if (previewRafId) cancelAnimationFrame(previewRafId);
+        previewRafId = null;
     }
 
     function updatePreview() {
         if (!mainModel) return;
         const { THREE } = window.Phonebook;
-        
-        // Clear previous object
         if (previewClone) {
-            previewScene.remove(previewClone);
-            previewScene.remove(previewSkeletonHelper);
-            // Properly dispose of old objects to prevent memory leaks
+            previewScene.remove(previewClone, previewSkeletonHelper);
             previewSkeletonHelper?.dispose();
         }
         
         previewClone = mainModel.object.clone();
         
-        // --- FIX: Center model and frame camera correctly ---
         const box = new THREE.Box3().setFromObject(previewClone);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-
-        previewClone.position.sub(center); // Center the model at the world origin
+        previewClone.position.sub(center);
 
         const maxDim = Math.max(size.x, size.y, size.z);
         const fov = previewCamera.fov * (Math.PI / 180);
         const cameraZ = Math.abs(maxDim / 1.5 / Math.tan(fov / 2));
-
         previewCamera.position.set(0, 0, cameraZ);
         previewCamera.lookAt(0, 0, 0);
-        // --- End Fix ---
 
         previewScene.add(previewClone);
-        
         previewSkeletonHelper = new THREE.SkeletonHelper(previewClone);
         previewScene.add(previewSkeletonHelper);
-        
         startPreviewAnimation();
     }
 
-
-    // --- Core Logic ---
     function showModal(visible) {
         modal.classList.toggle('show', visible);
         if (visible) {
             if (!mainModel) {
                 alert("No main model loaded. Please load a model first.");
-                showModal(false);
-                return;
+                return showModal(false);
             }
             initPreview();
             updatePreview();
-            // Reset UI state
             progressBar.style.display = 'none';
             removeBtn.style.display = 'block';
             completeBtn.style.display = 'none';
@@ -187,50 +167,94 @@
         progressFill.style.width = `${percent}%`;
         statusText.textContent = status;
     }
+    
+    // --- FIX: New robust model baking function ---
+    function bakeModel(sourceObject) {
+        const { THREE } = window.Phonebook;
+        const bakedGroup = new THREE.Group();
+        
+        sourceObject.updateWorldMatrix(true, true);
+
+        sourceObject.traverse(child => {
+            if (child.isSkinnedMesh) {
+                const newGeometry = new THREE.BufferGeometry();
+                const pos = child.geometry.attributes.position;
+                const normal = child.geometry.attributes.normal;
+                const uv = child.geometry.attributes.uv;
+
+                const finalPos = new Float32Array(pos.count * 3);
+                const finalNormal = new Float32Array(normal.count * 3);
+                
+                const tempPos = new THREE.Vector3();
+                const tempNormal = new THREE.Vector3();
+                const skinMatrix = new THREE.Matrix4();
+
+                for (let i = 0; i < pos.count; i++) {
+                    child.getVertexPosition(i, tempPos);
+                    tempPos.applyMatrix4(child.matrixWorld);
+                    tempPos.toArray(finalPos, i * 3);
+
+                    // Transform normals
+                    const skinIndex = child.geometry.attributes.skinIndex;
+                    const skinWeight = child.geometry.attributes.skinWeight;
+                    const skeleton = child.skeleton;
+                    
+                    skinMatrix.fromElements(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0);
+                    
+                    for (let j = 0; j < 4; j++) {
+                        const boneIndex = skinIndex.getComponent(i, j);
+                        const weight = skinWeight.getComponent(i, j);
+                        const bone = skeleton.bones[boneIndex];
+                        if (bone && weight > 0) {
+                           const boneMatrix = skeleton.boneMatrices[boneIndex];
+                           const tempMatrix = new THREE.Matrix4().fromArray(boneMatrix);
+                           skinMatrix.add(tempMatrix.multiplyScalar(weight));
+                        }
+                    }
+                    tempNormal.fromBufferAttribute(normal, i).applyMatrix3(new THREE.NormalMatrix().getNormalMatrix(skinMatrix));
+                    tempNormal.toArray(finalNormal, i * 3);
+                }
+
+                newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
+                newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormal, 3));
+                if (uv) {
+                    newGeometry.setAttribute('uv', uv); // UVs don't change
+                }
+                newGeometry.setIndex(child.geometry.index);
+
+                const newMesh = new THREE.Mesh(newGeometry, child.material);
+                newMesh.name = child.name;
+                bakedGroup.add(newMesh);
+            } else if (child.isMesh && !child.isSkinnedMesh) {
+                 // For regular meshes, just clone and apply world matrix
+                const newMesh = child.clone();
+                newMesh.applyMatrix4(child.matrixWorld);
+                bakedGroup.add(newMesh);
+            }
+        });
+        return bakedGroup;
+    }
 
     function startConversion() {
         progressBar.style.display = 'flex';
         removeBtn.style.display = 'none';
         
-        const { THREE } = window.Phonebook;
-        const riglessModel = new THREE.Group();
-        riglessModel.name = `${mainModel.name} (Rig Removed)`;
-        
         setTimeout(() => {
-            updateProgress(33, 'Cloning meshes...');
-            
-            // FIX: Correctly bake the posed meshes into a new static model
-            mainModel.object.updateWorldMatrix(true, true); // Ensure world matrices are up to date
-            mainModel.object.traverse(child => {
-                if (child.isMesh) {
-                    const newMesh = new THREE.Mesh(child.geometry, child.material);
-                    newMesh.applyMatrix4(child.matrixWorld); // Apply the final world transformation
-                    newMesh.name = child.name;
-                    riglessModel.add(newMesh);
-                }
-            });
+            updateProgress(50, 'Baking model geometry...');
+            const riglessModel = bakeModel(mainModel.object);
+            riglessModel.name = `${mainModel.name} (Rig Removed)`;
             
             setTimeout(() => {
-                updateProgress(66, 'Cleaning up old model...');
+                updateProgress(75, 'Cleaning up old model...');
                 
-                // Dispose of the old model's resources and remove from scene
-                // Use a non-animated cleaner call for instant removal
-                window.Viewer.remove(mainModel.object); // Remove from scene directly
+                window.Viewer.remove(mainModel.object);
                 
                 setTimeout(() => {
                     updateProgress(100, 'Process complete!');
                     
-                    // Create a new data object for the rig-less model
-                    const newModelData = {
-                        ...mainModel, // Copy stats from old model
-                        id: `model-${Date.now()}`,
-                        name: riglessModel.name,
-                        object: riglessModel,
-                    };
-
-                    // First, emit event to remove the old model from the Tabs UI
+                    const newModelData = { ...mainModel, id: `model-${Date.now()}`, name: riglessModel.name, object: riglessModel };
+                    
                     App.emit('asset:cleaned', { id: mainModel.id });
-                    // Then, emit event to load the new model, which will add it and make it active
                     App.emit('asset:loaded', newModelData);
                     
                     completeBtn.style.display = 'block';
@@ -239,28 +263,19 @@
         }, 300);
     }
     
-    // --- Bootstrap & Event Wiring ---
     function bootstrap() {
         if (window.RigRemover) return;
-        
         injectUI();
-
         App.on('asset:loaded', e => { if(e.detail?.isMainModel) mainModel = e.detail; });
         App.on('asset:cleaned', e => { if(mainModel && mainModel.id === e.detail.id) mainModel = null; });
-        
         removeBtn.addEventListener('click', startConversion);
         completeBtn.addEventListener('click', () => showModal(false));
         modal.addEventListener('click', e => { if (e.target === modal) showModal(false); });
 
-        // Expose public API for the menu button
-        window.RigRemover = {
-            show: () => showModal(true)
-        };
-        
+        window.RigRemover = { show: () => showModal(true) };
         window.Debug?.log('Rig Remover Module ready.');
     }
 
-    // Initialize module after the main app is ready
     if (window.App?.glVersion) bootstrap();
     else window.App?.on('app:booted', bootstrap);
 
