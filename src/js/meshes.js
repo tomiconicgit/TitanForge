@@ -77,7 +77,7 @@
             .tf-mesh-row .icon-btn svg { fill: #a0a7b0; transition: fill 0.2s ease; }
             .tf-mesh-row .rename-btn:hover svg { fill: #fff; }
             .tf-mesh-row .delete-btn:hover svg { fill: #ff5959; }
-            .tf-mesh-row .unskin-btn:hover svg { fill: #ffc107; } /* NEW */
+            .tf-mesh-row .unskin-btn:hover svg { fill: #ffc107; }
 
             /* Rename Modal Styles */
             .tf-rename-modal-content {
@@ -225,7 +225,6 @@
                     </div>
                 `;
                 
-                // Show the unskin button only for skinned meshes
                 if (mesh.isSkinnedMesh) {
                     const unskinBtn = row.querySelector('.unskin-btn');
                     if(unskinBtn) unskinBtn.style.display = 'flex';
@@ -292,7 +291,7 @@
         populateMeshList();
     }
 
-    // NEW: Function to convert a SkinnedMesh to a static Mesh and remove bones.
+    // Convert a SkinnedMesh to a static Mesh and remove bones.
     function unskinMesh(meshUuid) {
         if (!activeAsset) return;
 
@@ -304,25 +303,17 @@
 
         const { THREE } = window.Phonebook;
         
-        // 1. Create a new static Mesh with the same geometry and material.
         const staticMesh = new THREE.Mesh(skinnedMesh.geometry, skinnedMesh.material);
-        
-        // 2. Copy the local transform from the old mesh.
         staticMesh.name = skinnedMesh.name;
         staticMesh.position.copy(skinnedMesh.position);
         staticMesh.quaternion.copy(skinnedMesh.quaternion);
         staticMesh.scale.copy(skinnedMesh.scale);
 
-        // 3. Replace the old mesh with the new one.
         parent.add(staticMesh);
         parent.remove(skinnedMesh);
 
-        // 4. Find and remove all bones from this asset's hierarchy.
         const bonesToRemove = [];
-        activeAsset.object.traverse(obj => {
-            if (obj.isBone) bonesToRemove.push(obj);
-        });
-        
+        activeAsset.object.traverse(obj => { if (obj.isBone) bonesToRemove.push(obj); });
         if (bonesToRemove.length > 0) {
             window.Debug?.log(`Removing ${bonesToRemove.length} bones from asset.`);
             bonesToRemove.forEach(bone => bone.parent.remove(bone));
@@ -332,16 +323,39 @@
         App.emit('asset:updated', { id: activeAsset.id });
     }
 
+    // --- Safe material disposal helpers (avoid killing shared mats) ---
+    function isMaterialUsedElsewhere(root, mat, exceptMesh) {
+        if (!mat) return false;
+        let used = false;
+        root.traverse(o => {
+            if (used || o === exceptMesh || !(o.isMesh || o.isSkinnedMesh)) return;
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            if (mats && mats.some(m => m === mat)) used = true;
+        });
+        return used;
+    }
+
     function disposeMesh(mesh) {
         if (!mesh) return;
-        if(mesh.geometry) mesh.geometry.dispose();
+
+        if (mesh.geometry) mesh.geometry.dispose();
+
         if (mesh.material) {
-            if (Array.isArray(mesh.material)) {
-                mesh.material.forEach(mat => mat.dispose());
-            } else {
-                mesh.material.dispose();
-            }
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach(mat => {
+                if (!isMaterialUsedElsewhere(activeAsset.object, mat, mesh)) {
+                    // textures belong to this material; dispose them too
+                    if (mat.map) mat.map.dispose?.();
+                    if (mat.normalMap) mat.normalMap.dispose?.();
+                    if (mat.roughnessMap) mat.roughnessMap.dispose?.();
+                    if (mat.metalnessMap) mat.metalnessMap.dispose?.();
+                    if (mat.aoMap) mat.aoMap.dispose?.();
+                    if (mat.emissiveMap) mat.emissiveMap.dispose?.();
+                    mat.dispose?.();
+                }
+            });
         }
+
         if (mesh.parent) mesh.parent.remove(mesh);
     }
     
