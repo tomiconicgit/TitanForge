@@ -218,7 +218,13 @@
         } else {
             const targetBone = mainModel.object.getObjectByName(boneName);
             if (targetBone) {
-                targetBone.attach(activeAsset.object);
+                // ================== FIX START ==================
+                // Use .add() to parent the object without preserving world transforms.
+                // This allows the subsequent .set() calls to work as expected for a
+                // "snap-to-origin" system like Mr. Potato Head.
+                targetBone.add(activeAsset.object);
+                // =================== FIX END ===================
+
                 activeAsset.object.position.set(0, 0, 0);
                 activeAsset.object.rotation.set(0, 0, 0);
                 activeAsset.object.scale.set(1, 1, 1);
