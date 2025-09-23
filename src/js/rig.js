@@ -1,13 +1,11 @@
-// src/js/rig.js - Toggles the visibility of the active model's skeleton.
-
+// src/js/rig.js - Toggles the visibility of the main model's skeleton.
 (function () {
     'use strict';
 
-    let activeAsset = null;
+    // FIX: This module should only ever operate on the main model, not any active asset.
+    let mainModel = null;
     let skeletonHelper = null;
     let isVisible = false;
-
-    // UI is now handled by toggles.js
 
     function destroyRigVisual() {
         if (skeletonHelper) {
@@ -19,29 +17,27 @@
 
     function createRigVisual() {
         destroyRigVisual(); // Always clear the old one first
-        if (!activeAsset || !activeAsset.object) { return; }
+        if (!mainModel || !mainModel.object) { return; }
         
         const { THREE } = window.Phonebook;
-        skeletonHelper = new THREE.SkeletonHelper(activeAsset.object);
+        skeletonHelper = new THREE.SkeletonHelper(mainModel.object);
         skeletonHelper.material.linewidth = 2; // Make it a bit more visible
         window.Viewer.add(skeletonHelper);
     }
 
-    function handleAssetActivated(event) {
-        // FIX: Unconditionally destroy the old helper before switching to the new asset.
-        destroyRigVisual();
-        
-        activeAsset = event.detail;
-
-        // If the rig toggle is already on, create the visual for the new model.
-        if (isVisible) {
-            createRigVisual();
+    // FIX: Listen for when the main model is loaded or cleaned.
+    function handleAssetLoaded(event) {
+        if (event.detail?.isMainModel) {
+            mainModel = event.detail;
+            if (isVisible) {
+                createRigVisual();
+            }
         }
     }
     
     function handleAssetCleaned(event) {
-        if (activeAsset && activeAsset.id === event.detail.id) {
-            activeAsset = null;
+        if (mainModel && mainModel.id === event.detail.id) {
+            mainModel = null;
             destroyRigVisual();
         }
     }
@@ -49,10 +45,9 @@
     function bootstrap() {
         if (window.Rig) return;
         
-        App.on('asset:activated', handleAssetActivated);
+        App.on('asset:loaded', handleAssetLoaded);
         App.on('asset:cleaned', handleAssetCleaned);
 
-        // Expose a public API for the toggles UI to control this module
         window.Rig = {
             setVisible: (visible) => {
                 isVisible = !!visible;
