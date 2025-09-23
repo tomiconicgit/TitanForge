@@ -1,11 +1,12 @@
 // src/js/meshes.js - Panel for toggling mesh visibility on the active asset.
 
 (function () {
-    'use strict';
+    'use-strict';
 
     let panel, waitingMessage, listContainer, activeAsset;
     let renameModal, renameInput, confirmRenameBtn, cancelRenameBtn;
     let meshToRename = null;
+    let isMassRemoveMode = false;
 
     // --- UI Injection ---
     function injectUI() {
@@ -48,22 +49,32 @@
             }
             #tf-add-plane-btn:hover { background-color: rgba(37, 117, 252, 0.3); }
 
-            /* Remove All Meshes Button */
-            #tf-remove-all-meshes-btn {
-                width: 100%; padding: 10px 12px; margin-bottom: 15px;
-                font-size: 14px; font-weight: 600;
-                border: 1px solid rgba(255, 59, 48, 0.5); border-radius: 8px;
-                background-color: rgba(255, 59, 48, 0.15); color: #ff5959;
-                cursor: pointer; transition: all 0.2s ease;
+            /* --- NEW: Mass Remove Buttons --- */
+            #tf-mass-remove-toggle-btn {
+                width: 100%; padding: 10px 12px; margin-bottom: 15px; font-size: 14px; font-weight: 600;
+                border-radius: 8px; border: none;
+                background-color: rgba(255, 255, 255, 0.1); color: #e6eef6;
+                cursor: pointer; transition: background-color 0.2s ease;
             }
-            #tf-remove-all-meshes-btn:hover { background-color: rgba(255, 59, 48, 0.3); color: #ff8a80; }
-            #tf-remove-all-meshes-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+            #tf-mass-remove-toggle-btn:hover { background-color: rgba(255, 255, 255, 0.15); }
+            #tf-mass-remove-toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+            #tf-mass-remove-actions { display: flex; gap: 10px; margin-bottom: 15px; }
+            #tf-mass-remove-actions button {
+                flex: 1; padding: 10px 12px; font-size: 14px; font-weight: 600;
+                border-radius: 8px; border: none; cursor: pointer; transition: opacity 0.2s ease;
+            }
+            #tf-mass-remove-actions button:hover { opacity: 0.85; }
+            #tf-remove-selected-btn { background-color: #c62828; color: #fff; }
+            #tf-cancel-mass-remove-btn { background-color: rgba(255,255,255,0.1); color: #fff; }
 
             /* Mesh list styles */
             #tf-meshes-list { display: flex; flex-direction: column; gap: 8px; }
             .tf-mesh-row {
                 display: flex; align-items: center; justify-content: space-between;
                 padding: 10px; background: rgba(255,255,255,0.05); border-radius: 6px;
+            }
+            .tf-mesh-row .mesh-details {
+                display: flex; align-items: center; flex-grow: 1; overflow: hidden;
             }
             .tf-mesh-row .name {
                 color: #e6eef6; font-size: 14px; white-space: nowrap;
@@ -78,6 +89,14 @@
             .tf-mesh-row .rename-btn:hover svg { fill: #fff; }
             .tf-mesh-row .delete-btn:hover svg { fill: #ff5959; }
             .tf-mesh-row .unskin-btn:hover svg { fill: #ffc107; }
+
+            /* --- NEW: Checkbox styles for Mass Remove --- */
+            .mass-remove-checkbox {
+                display: none; margin-right: 12px; width: 18px; height: 18px;
+                accent-color: #2575fc; flex-shrink: 0;
+            }
+            #tf-meshes-list.mass-remove-active .mass-remove-checkbox { display: inline-block; }
+            #tf-meshes-list.mass-remove-active .actions { display: none; }
 
             /* Rename Modal Styles */
             .tf-rename-modal-content {
@@ -129,7 +148,11 @@
                     </div>
                 </div>
                 <button id="tf-add-plane-btn">Add Proxy Plane</button>
-                <button id="tf-remove-all-meshes-btn">Remove All Meshes</button>
+                <button id="tf-mass-remove-toggle-btn">Mass Remove</button>
+                <div id="tf-mass-remove-actions" style="display: none;">
+                    <button id="tf-remove-selected-btn">Remove Selected</button>
+                    <button id="tf-cancel-mass-remove-btn">Cancel</button>
+                </div>
                 <div id="tf-meshes-list"></div>
             </div>
         `;
@@ -191,14 +214,14 @@
         }
 
         const editorEl = panel.querySelector('#tf-meshes-editor');
-        const removeBtn = panel.querySelector('#tf-remove-all-meshes-btn');
+        const massRemoveBtn = panel.querySelector('#tf-mass-remove-toggle-btn');
         listContainer.innerHTML = '';
         
         if (meshes.length === 0) {
-            removeBtn.disabled = true;
+            massRemoveBtn.disabled = true;
             listContainer.innerHTML = `<div style="text-align: center; color: #a0a7b0;">No meshes found in this model.</div>`;
         } else {
-             removeBtn.disabled = false;
+             massRemoveBtn.disabled = false;
              meshes.forEach((mesh, index) => {
                 const row = document.createElement('div');
                 row.className = 'tf-mesh-row';
@@ -207,7 +230,10 @@
                 const meshId = `${activeAsset.id}-mesh-${index}`;
 
                 row.innerHTML = `
-                    <span class="name" title="${meshName}">${meshName}</span>
+                    <div class="mesh-details">
+                        <input type="checkbox" class="mass-remove-checkbox" title="Select for removal">
+                        <span class="name" title="${meshName}">${meshName}</span>
+                    </div>
                     <div class="actions">
                         <button class="icon-btn unskin-btn" title="Remove Rig from Mesh" style="display: none;">
                             <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17 7h-4v2h4c1.65 0 3 1.35 3 3s-1.35 3-3 3h-4v2h4c2.76 0 5-2.24 5-5s-2.24-5-5-5zm-6 8H7c-1.65 0-3-1.35-3-3s1.35-3 3-3h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-2zm-3-4h8v2H8v-2z"></path></svg>
@@ -240,6 +266,22 @@
     }
 
     // --- Mesh Management Logic ---
+    function toggleMassRemoveMode(enable) {
+        const toggleBtn = panel.querySelector('#tf-mass-remove-toggle-btn');
+        const actionsDiv = panel.querySelector('#tf-mass-remove-actions');
+
+        isMassRemoveMode = enable;
+
+        toggleBtn.style.display = enable ? 'none' : 'block';
+        actionsDiv.style.display = enable ? 'flex' : 'none';
+        listContainer.classList.toggle('mass-remove-active', enable);
+
+        if (!enable) {
+            listContainer.querySelectorAll('.mass-remove-checkbox:checked').forEach(cb => {
+                cb.checked = false;
+            });
+        }
+    }
 
     function addProxyPlane() {
         if (!activeAsset) return;
@@ -291,7 +333,6 @@
         populateMeshList();
     }
 
-    // Convert a SkinnedMesh to a static Mesh and remove bones.
     function unskinMesh(meshUuid) {
         if (!activeAsset) return;
 
@@ -323,7 +364,6 @@
         App.emit('asset:updated', { id: activeAsset.id });
     }
 
-    // --- Safe material disposal helpers (avoid killing shared mats) ---
     function isMaterialUsedElsewhere(root, mat, exceptMesh) {
         if (!mat) return false;
         let used = false;
@@ -344,7 +384,6 @@
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
             mats.forEach(mat => {
                 if (!isMaterialUsedElsewhere(activeAsset.object, mat, mesh)) {
-                    // textures belong to this material; dispose them too
                     if (mat.map) mat.map.dispose?.();
                     if (mat.normalMap) mat.normalMap.dispose?.();
                     if (mat.roughnessMap) mat.roughnessMap.dispose?.();
@@ -370,29 +409,53 @@
         }
     }
 
-    function removeAllMeshes() {
+    function removeSelectedMeshes() {
         if (!activeAsset) return;
-        if (!confirm('Are you sure you want to permanently remove ALL meshes from this model? This cannot be undone.')) {
+
+        const selectedCheckboxes = listContainer.querySelectorAll('.mass-remove-checkbox:checked');
+        if (selectedCheckboxes.length === 0) {
+            alert('No meshes selected for removal.');
             return;
         }
+
+        if (!confirm(`Are you sure you want to permanently remove the ${selectedCheckboxes.length} selected meshes? This cannot be undone.`)) {
+            return;
+        }
+
         const meshesToRemove = [];
-        activeAsset.object.traverse(child => { if (child.isMesh || child.isSkinnedMesh) meshesToRemove.push(child); });
-        
-        if (meshesToRemove.length === 0) return;
-        
-        meshesToRemove.forEach(disposeMesh);
-        window.Debug?.log(`Removed ${meshesToRemove.length} meshes.`);
-        App.emit('asset:updated', { id: activeAsset.id });
-        populateMeshList();
+        selectedCheckboxes.forEach(cb => {
+            const row = cb.closest('.tf-mesh-row');
+            if (row?.dataset.meshUuid) {
+                const mesh = activeAsset.object.getObjectByProperty('uuid', row.dataset.meshUuid);
+                if (mesh) meshesToRemove.push(mesh);
+            }
+        });
+
+        if (meshesToRemove.length > 0) {
+            meshesToRemove.forEach(disposeMesh);
+            window.Debug?.log(`Removed ${meshesToRemove.length} meshes.`);
+            App.emit('asset:updated', { id: activeAsset.id });
+            populateMeshList();
+        }
+
+        toggleMassRemoveMode(false);
     }
+
 
     // --- Event Handlers ---
     function handleNavChange(event) {
-        panel.classList.toggle('show', event.detail.tab === 'meshes');
+        const isShowing = event.detail.tab === 'meshes';
+        panel.classList.toggle('show', isShowing);
+        if (!isShowing && isMassRemoveMode) {
+            toggleMassRemoveMode(false);
+        }
     }
 
     function handleAssetActivated(event) {
         activeAsset = event.detail;
+        if (isMassRemoveMode) {
+           toggleMassRemoveMode(false);
+        }
         populateMeshList();
     }
 
@@ -401,7 +464,9 @@
         App.on('asset:activated', handleAssetActivated);
         
         panel.querySelector('#tf-add-plane-btn').addEventListener('click', addProxyPlane);
-        panel.querySelector('#tf-remove-all-meshes-btn').addEventListener('click', removeAllMeshes);
+        panel.querySelector('#tf-mass-remove-toggle-btn').addEventListener('click', () => toggleMassRemoveMode(true));
+        panel.querySelector('#tf-cancel-mass-remove-btn').addEventListener('click', () => toggleMassRemoveMode(false));
+        panel.querySelector('#tf-remove-selected-btn').addEventListener('click', removeSelectedMeshes);
 
         const opacitySlider = panel.querySelector('#proxy-opacity');
         const sizeSlider = panel.querySelector('#proxy-size');
@@ -422,6 +487,8 @@
         });
 
         listContainer.addEventListener('click', (e) => {
+            if (isMassRemoveMode) return; // Disable individual actions in mass remove mode
+            
             const button = e.target.closest('.icon-btn');
             if (!button || !activeAsset) return;
 
