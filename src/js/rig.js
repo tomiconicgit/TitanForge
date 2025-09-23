@@ -12,22 +12,28 @@
     function destroyRigVisual() {
         if (skeletonHelper) {
             window.Viewer.remove(skeletonHelper);
+            skeletonHelper.dispose(); // Free up GPU resources
             skeletonHelper = null;
         }
     }
 
     function createRigVisual() {
-        destroyRigVisual();
+        destroyRigVisual(); // Always clear the old one first
         if (!activeAsset || !activeAsset.object) { return; }
         
         const { THREE } = window.Phonebook;
         skeletonHelper = new THREE.SkeletonHelper(activeAsset.object);
+        skeletonHelper.material.linewidth = 2; // Make it a bit more visible
         window.Viewer.add(skeletonHelper);
     }
 
     function handleAssetActivated(event) {
+        // FIX: Unconditionally destroy the old helper before switching to the new asset.
+        destroyRigVisual();
+        
         activeAsset = event.detail;
-        // If the rig was supposed to be visible, recreate it for the new model
+
+        // If the rig toggle is already on, create the visual for the new model.
         if (isVisible) {
             createRigVisual();
         }
