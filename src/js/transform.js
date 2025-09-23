@@ -175,7 +175,7 @@
     function updatePanelForAsset() {
         if (!activeAsset) return;
         const boneSection = panel.querySelector('#tf-bone-attach-section');
-        // **FIX**: Show attach button only if the active asset is NOT a main model
+        // Show attach button only if the active asset is NOT a main model
         const showBoneAttach = !!mainModel && !activeAsset.isMainModel;
         boneSection.style.display = showBoneAttach ? 'block' : 'none';
         
@@ -210,27 +210,44 @@
         });
     }
     
+    // UPDATED: preserve visual size when parenting under a scaled/rotated bone
     function attachAssetToBone(boneName) {
         if (!activeAsset || !mainModel) return;
-        if (boneName === 'detach') {
-            window.Viewer.scene.attach(activeAsset.object);
-            boneAttachBtn.textContent = 'Attach to Bone...';
-        } else {
-            const targetBone = mainModel.object.getObjectByName(boneName);
-            if (targetBone) {
-                // ================== FIX START ==================
-                // Use .add() to parent the object without preserving world transforms.
-                // This allows the subsequent .set() calls to work as expected for a
-                // "snap-to-origin" system like Mr. Potato Head.
-                targetBone.add(activeAsset.object);
-                // =================== FIX END ===================
 
-                activeAsset.object.position.set(0, 0, 0);
-                activeAsset.object.rotation.set(0, 0, 0);
-                activeAsset.object.scale.set(1, 1, 1);
-                boneAttachBtn.textContent = `Attached to: ${boneName}`;
-            }
+        const { THREE } = window.Phonebook;
+        const obj = activeAsset.object;
+
+        if (boneName === 'detach') {
+            window.Viewer.scene.attach(obj);          // keep world transform
+            boneAttachBtn.textContent = 'Attach to Bone...';
+            syncSlidersToAsset();
+            return;
         }
+
+        const targetBone = mainModel.object.getObjectByName(boneName);
+        if (!targetBone) return;
+
+        // 1) cache the current world scale (visual size) before re-parenting
+        const worldScaleBefore = new THREE.Vector3();
+        obj.getWorldScale(worldScaleBefore);
+
+        // 2) re-parent while preserving world transform (prevents sudden shrink/disappear)
+        targetBone.attach(obj);
+
+        // 3) snap to bone origin but compensate for bone world scale, so visual size stays constant
+        const boneWorldScale = new THREE.Vector3();
+        targetBone.getWorldScale(boneWorldScale);
+
+        obj.position.set(0, 0, 0);
+        obj.rotation.set(0, 0, 0);
+        obj.scale.set(
+            worldScaleBefore.x / (boneWorldScale.x || 1),
+            worldScaleBefore.y / (boneWorldScale.y || 1),
+            worldScaleBefore.z / (boneWorldScale.z || 1)
+        );
+        obj.updateMatrixWorld(true);
+
+        boneAttachBtn.textContent = `Attached to: ${boneName}`;
         syncSlidersToAsset();
     }
 
@@ -238,7 +255,6 @@
     
     function handleAssetLoaded(event) {
         const assetData = event.detail;
-        // **FIX**: Designate the main model based on the new flag
         if (assetData.isMainModel) {
             mainModel = assetData;
             window.Debug?.log(`Main model designated: ${mainModel.name}`);
@@ -249,13 +265,11 @@
     function handleAssetActivated(event) {
         const assetData = event.detail;
 
-        // **FIX**: If event detail is null, reset the panel
         if (!assetData) {
             resetPanel();
             return;
         }
 
-        // Show controls if they were hidden
         if (waitingMessage.style.display !== 'none') {
             waitingMessage.style.display = 'none';
             controlsContainer.style.display = 'block';
@@ -266,11 +280,10 @@
         updatePanelForAsset();
     }
     
-    // **NEW**: Handle cleaning of assets to clear mainModel if needed
     function handleAssetCleaned(event) {
         if (mainModel && mainModel.id === event.detail.id) {
             mainModel = null;
-            populateBoneList(); // Clear the bone list in the modal
+            populateBoneList();
             window.Debug?.log('Main model was cleaned.');
         }
     }
@@ -279,7 +292,7 @@
         Navigation.on('change', handleNavChange);
         App.on('asset:loaded', handleAssetLoaded);
         App.on('asset:activated', handleAssetActivated);
-        App.on('asset:cleaned', handleAssetCleaned); // **NEW**
+        App.on('asset:cleaned', handleAssetCleaned);
 
         const applyTransforms = {
             pos_x: val => activeAsset.object.position.x = val,
