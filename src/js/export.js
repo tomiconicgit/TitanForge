@@ -1,4 +1,4 @@
-// src/js/export.js â Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
+// src/js/export.js Ã¢ÂÂ Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
 (function () {
   'use strict';
 
@@ -238,7 +238,7 @@
 
     cancelBtn.onclick = () => {
       if (isExporting) {
-        cancelRequested = true; // can cancel during prep; once export starts weâll ignore
+        cancelRequested = true; // can cancel during prep; once export starts weÃ¢ÂÂll ignore
         progressFill.style.background = '#ff3b30';
         updateProgress(100, 'Cancelled');
         isExporting = false;
