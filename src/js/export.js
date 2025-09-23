@@ -1,4 +1,4 @@
-// src/js/export.js — Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
+// src/js/export.js â Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
 (function () {
   'use strict';
 
@@ -148,6 +148,42 @@
     clone.matrixAutoUpdate = false;
     clone.updateMatrixWorld(true);
 
+    // ================== FIX START ==================
+    // Check if the model has bones but no mesh to anchor them for the exporter.
+    let hasBones = false;
+    let hasSkinnedMesh = false;
+    const allBones = [];
+
+    clone.traverse(node => {
+        if (node.isBone) {
+            hasBones = true;
+            allBones.push(node);
+        }
+        if (node.isSkinnedMesh) {
+            hasSkinnedMesh = true;
+        }
+    });
+
+    // If we have a skeleton but no mesh, inject a dummy one to ensure the rig exports.
+    if (hasBones && !hasSkinnedMesh) {
+        window.Debug?.log('No SkinnedMesh found. Injecting placeholder mesh to preserve skeleton.');
+        
+        // Create an empty geometry and an invisible material.
+        const dummyGeo = new THREE.BufferGeometry();
+        const dummyMat = new THREE.MeshStandardMaterial({ visible: false });
+        
+        // Create the SkinnedMesh and bind the skeleton to it.
+        const dummySkinnedMesh = new THREE.SkinnedMesh(dummyGeo, dummyMat);
+        dummySkinnedMesh.name = 'Skeleton_Placeholder';
+        
+        const skeleton = new THREE.Skeleton(allBones);
+        dummySkinnedMesh.bind(skeleton);
+        
+        // Add the dummy mesh to the clone's root. The exporter will now find and process the skeleton.
+        clone.add(dummySkinnedMesh);
+    }
+    // =================== FIX END ===================
+
     // Prune hidden nodes & sanitize materials in small batches
     let processed = 0;
     const toProcess = [];
@@ -202,7 +238,7 @@
 
     cancelBtn.onclick = () => {
       if (isExporting) {
-        cancelRequested = true; // can cancel during prep; once export starts we’ll ignore
+        cancelRequested = true; // can cancel during prep; once export starts weâll ignore
         progressFill.style.background = '#ff3b30';
         updateProgress(100, 'Cancelled');
         isExporting = false;
