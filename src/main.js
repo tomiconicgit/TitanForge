@@ -98,6 +98,7 @@
         await this.import('copy', './js/copy.js');
         await this.import('animation', './js/animation.js');
         await this.import('rig', './js/rig.js');
+        await this.import('rigRemover', './js/removerig.js');
         await this.import('hide', './js/hide.js');
         await this.import('toggles', './js/toggles.js');
         await this.import('transform', './js/transform.js');
