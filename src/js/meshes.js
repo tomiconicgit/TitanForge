@@ -22,6 +22,32 @@
             #tf-meshes-panel.show { display: flex; }
             #tf-meshes-waiting { color: #a0a7b0; text-align: center; margin: auto; }
 
+            /* --- NEW: Proxy Plane Controls & Button --- */
+            #tf-proxy-controls {
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+                margin-bottom: 15px; padding-bottom: 10px;
+            }
+            .tf-slider-group { margin-bottom: 10px; }
+            .tf-slider-group label {
+                display: block; color: #a0a7b0; font-size: 13px; margin-bottom: 8px;
+            }
+            .tf-slider-group input[type=range] {
+                width: 100%; -webkit-appearance: none; height: 4px;
+                background: rgba(255,255,255,0.1); border-radius: 4px; outline: none;
+            }
+            .tf-slider-group input[type=range]::-webkit-slider-thumb {
+                -webkit-appearance: none; appearance: none;
+                width: 16px; height: 16px; background: #2575fc;
+                cursor: pointer; border-radius: 50%;
+            }
+            #tf-add-plane-btn {
+                width: 100%; padding: 10px 12px; margin-bottom: 15px; font-size: 14px; font-weight: 600;
+                border-radius: 8px; border: none;
+                background-color: rgba(37, 117, 252, 0.2); color: #5c9eff;
+                cursor: pointer; transition: background-color 0.2s ease;
+            }
+            #tf-add-plane-btn:hover { background-color: rgba(37, 117, 252, 0.3); }
+
             /* Remove All Meshes Button */
             #tf-remove-all-meshes-btn {
                 width: 100%; padding: 10px 12px; margin-bottom: 15px;
@@ -91,6 +117,17 @@
         panel.innerHTML = `
             <div id="tf-meshes-waiting">Load a model to view its meshes.</div>
             <div id="tf-meshes-editor" style="display: none;">
+                <div id="tf-proxy-controls" style="display: none;">
+                    <div class="tf-slider-group">
+                        <label for="proxy-opacity">Proxy Opacity</label>
+                        <input type="range" id="proxy-opacity" min="0" max="1" value="0.5" step="0.01">
+                    </div>
+                    <div class="tf-slider-group">
+                        <label for="proxy-size">Proxy Size</label>
+                        <input type="range" id="proxy-size" min="0.01" max="2" value="1" step="0.01">
+                    </div>
+                </div>
+                <button id="tf-add-plane-btn">Add Proxy Plane</button>
                 <button id="tf-remove-all-meshes-btn">Remove All Meshes</button>
                 <div id="tf-meshes-list"></div>
             </div>
@@ -139,8 +176,19 @@
 
         const meshes = [];
         activeAsset.object.traverse(obj => {
-            if (obj.isMesh) meshes.push(obj);
+            if (obj.isMesh || obj.isSkinnedMesh) meshes.push(obj);
         });
+        
+        // --- NEW: Check for proxy plane and show/hide its controls ---
+        const proxyControls = panel.querySelector('#tf-proxy-controls');
+        const proxyPlane = activeAsset.object.getObjectByName('ProxyPlane');
+        if (proxyPlane) {
+            proxyControls.style.display = 'block';
+            panel.querySelector('#proxy-opacity').value = proxyPlane.material.opacity;
+            panel.querySelector('#proxy-size').value = proxyPlane.scale.x;
+        } else {
+            proxyControls.style.display = 'none';
+        }
 
         const editorEl = panel.querySelector('#tf-meshes-editor');
         const removeBtn = panel.querySelector('#tf-remove-all-meshes-btn');
@@ -182,16 +230,60 @@
         editorEl.style.display = 'block';
     }
 
-    // --- Mesh Removal Logic ---
+    // --- Mesh Management Logic ---
+
+    // NEW: Function to add a proxy plane
+    function addProxyPlane() {
+        if (!activeAsset) return;
+
+        const existingPlane = activeAsset.object.getObjectByName('ProxyPlane');
+        if (existingPlane) {
+            alert('A Proxy Plane already exists for this model.');
+            return;
+        }
+
+        const { THREE } = window.Phonebook;
+        const geo = new THREE.PlaneGeometry(1, 1);
+        const mat = new THREE.MeshStandardMaterial({
+            color: 0xcccccc,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide
+        });
+
+        let newMesh;
+        const bones = [];
+        activeAsset.object.traverse(node => { if (node.isBone) bones.push(node); });
+
+        // If the model has a skeleton, we MUST create a SkinnedMesh to anchor it.
+        if (bones.length > 0) {
+            newMesh = new THREE.SkinnedMesh(geo, mat);
+            const skeleton = new THREE.Skeleton(bones);
+            newMesh.bind(skeleton);
+            window.Debug?.log('Added Proxy Plane as SkinnedMesh.');
+        } else {
+            newMesh = new THREE.Mesh(geo, mat);
+            window.Debug?.log('Added Proxy Plane as standard Mesh.');
+        }
+
+        newMesh.name = 'ProxyPlane'; // This name is used to find and control it
+        activeAsset.object.add(newMesh); // Add it to the active model's root
+
+        App.emit('asset:updated', { id: activeAsset.id });
+        populateMeshList();
+    }
+
     function disposeMesh(mesh) {
         if (!mesh) return;
-        mesh.geometry.dispose();
-        if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(mat => mat.dispose());
-        } else if (mesh.material) {
-            mesh.material.dispose();
+        if(mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+                mesh.material.forEach(mat => mat.dispose());
+            } else {
+                mesh.material.dispose();
+            }
         }
-        mesh.parent.remove(mesh);
+        if (mesh.parent) mesh.parent.remove(mesh);
     }
     
     function removeSingleMesh(meshUuid) {
@@ -201,7 +293,7 @@
             disposeMesh(mesh);
             window.Debug?.log(`Removed mesh: ${mesh.name}`);
             App.emit('asset:updated', { id: activeAsset.id });
-            populateMeshList(); // Refresh the list
+            populateMeshList();
         }
     }
 
@@ -211,7 +303,7 @@
             return;
         }
         const meshesToRemove = [];
-        activeAsset.object.traverse(child => { if (child.isMesh) meshesToRemove.push(child); });
+        activeAsset.object.traverse(child => { if (child.isMesh || child.isSkinnedMesh) meshesToRemove.push(child); });
         
         if (meshesToRemove.length === 0) return;
         
@@ -234,8 +326,28 @@
     function wireEvents() {
         Navigation.on('change', handleNavChange);
         App.on('asset:activated', handleAssetActivated);
-
+        
+        // --- NEW: Wire up new buttons and sliders ---
+        panel.querySelector('#tf-add-plane-btn').addEventListener('click', addProxyPlane);
         panel.querySelector('#tf-remove-all-meshes-btn').addEventListener('click', removeAllMeshes);
+
+        const opacitySlider = panel.querySelector('#proxy-opacity');
+        const sizeSlider = panel.querySelector('#proxy-size');
+
+        opacitySlider.addEventListener('input', e => {
+            if (!activeAsset) return;
+            const plane = activeAsset.object.getObjectByName('ProxyPlane');
+            if (plane) plane.material.opacity = parseFloat(e.target.value);
+        });
+
+        sizeSlider.addEventListener('input', e => {
+            if (!activeAsset) return;
+            const plane = activeAsset.object.getObjectByName('ProxyPlane');
+            if (plane) {
+                const size = parseFloat(e.target.value);
+                plane.scale.set(size, size, 1);
+            }
+        });
 
         listContainer.addEventListener('click', (e) => {
             const button = e.target.closest('.icon-btn');
@@ -262,8 +374,7 @@
             const newName = renameInput.value.trim();
             if (newName) {
                 meshToRename.name = newName;
-                const row = listContainer.querySelector(`[data-mesh-uuid="${meshToRename.uuid}"]`);
-                if (row) row.querySelector('.name').textContent = newName;
+                populateMeshList();
                 showRenameModal(false);
             }
         });
