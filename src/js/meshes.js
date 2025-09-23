@@ -232,7 +232,6 @@
 
     // --- Mesh Management Logic ---
 
-    // NEW: Function to add a proxy plane
     function addProxyPlane() {
         if (!activeAsset) return;
 
@@ -255,12 +254,35 @@
         const bones = [];
         activeAsset.object.traverse(node => { if (node.isBone) bones.push(node); });
 
-        // If the model has a skeleton, we MUST create a SkinnedMesh to anchor it.
         if (bones.length > 0) {
+            // ================== FIX START ==================
+            // A SkinnedMesh's geometry MUST have skinIndex and skinWeight attributes.
+            // We create them here and bind all vertices to the first bone.
+            const vertexCount = geo.attributes.position.count;
+            const skinIndices = new Uint16Array(vertexCount * 4); // 4 bones per vertex
+            const skinWeights = new Float32Array(vertexCount * 4);
+
+            for (let i = 0; i < vertexCount; i++) {
+                const i4 = i * 4;
+                // Bind to the first bone (index 0) with 100% weight.
+                skinIndices[i4 + 0] = 0;
+                skinIndices[i4 + 1] = 0;
+                skinIndices[i4 + 2] = 0;
+                skinIndices[i4 + 3] = 0;
+
+                skinWeights[i4 + 0] = 1.0;
+                skinWeights[i4 + 1] = 0.0;
+                skinWeights[i4 + 2] = 0.0;
+                skinWeights[i4 + 3] = 0.0;
+            }
+            geo.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndices, 4));
+            geo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeights, 4));
+            // =================== FIX END ===================
+
             newMesh = new THREE.SkinnedMesh(geo, mat);
             const skeleton = new THREE.Skeleton(bones);
             newMesh.bind(skeleton);
-            window.Debug?.log('Added Proxy Plane as SkinnedMesh.');
+            window.Debug?.log('Added Proxy Plane as SkinnedMesh with skinning attributes.');
         } else {
             newMesh = new THREE.Mesh(geo, mat);
             window.Debug?.log('Added Proxy Plane as standard Mesh.');
