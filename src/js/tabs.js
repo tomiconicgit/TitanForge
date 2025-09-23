@@ -119,18 +119,38 @@
     function setActiveAsset(assetId) {
         if (activeAssetId === assetId) return;
         activeAssetId = assetId;
-        
-        // **FIX**: Emit the asset data object, or null if no asset is active
         App.emit('asset:activated', assetId ? assets.get(assetId) : null);
         render();
     }
+
+    // --- NEW: Function to recalculate stats for a given asset ---
+    function recalculateAssetStats(asset) {
+        if (!asset || !asset.object) return;
+
+        let vertexCount = 0;
+        let triangleCount = 0;
+
+        asset.object.traverse(obj => {
+            if (obj.isMesh && obj.geometry) {
+                vertexCount += obj.geometry.attributes.position.count;
+                if (obj.geometry.index) {
+                    triangleCount += obj.geometry.index.count / 3;
+                } else {
+                    triangleCount += obj.geometry.attributes.position.count / 3;
+                }
+            }
+        });
+
+        asset.vertices = vertexCount;
+        asset.polygons = Math.floor(triangleCount);
+    }
+
 
     // --- Event Handlers ---
     function handleAssetLoaded(event) {
         const assetData = event.detail;
         if (assetData && assetData.id) {
             assets.set(assetData.id, assetData);
-            // If it's the first model loaded, make it active automatically
             if (assets.size === 1) {
                 setActiveAsset(assetData.id);
             } else {
@@ -143,19 +163,22 @@
         const { id } = event.detail;
         if (id && assets.has(id)) {
             assets.delete(id);
-
-            // **FIX**: If the active asset was deleted, find a new one or deactivate.
             if (activeAssetId === id) {
-                let nextAssetId = null;
-                // If other assets still exist, make the first one active
-                if (assets.size > 0) {
-                   nextAssetId = assets.keys().next().value;
-                }
-                // This will correctly deactivate if nextAssetId is null
+                let nextAssetId = assets.size > 0 ? assets.keys().next().value : null;
                 setActiveAsset(nextAssetId);
             } else {
-                 render(); // Just re-render if a non-active tab was closed
+                 render();
             }
+        }
+    }
+    
+    // --- NEW: Event handler for when an asset's data is modified ---
+    function handleAssetUpdated(event) {
+        const { id } = event.detail;
+        if (id && assets.has(id)) {
+            const assetToUpdate = assets.get(id);
+            recalculateAssetStats(assetToUpdate);
+            render(); // Re-render the UI with the new stats
         }
     }
 
@@ -181,7 +204,6 @@
             event.stopPropagation();
             setActiveAsset(assetId);
         } else {
-            // If the card itself (but not a button) is clicked, make it active
             setActiveAsset(assetId);
         }
     }
@@ -194,6 +216,7 @@
         // Listen for global and local events
         App.on('asset:loaded', handleAssetLoaded);
         App.on('asset:cleaned', handleAssetCleaned);
+        App.on('asset:updated', handleAssetUpdated); // <-- NEW LISTENER
         Navigation.on('change', handleNavChange);
         listContainer.addEventListener('click', handleListClick);
 
