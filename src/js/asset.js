@@ -32,6 +32,16 @@
         });
     };
 
+    function centerAndGroundModel(model) {
+        const { THREE } = window.Phonebook;
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+
+        model.position.x -= center.x;
+        model.position.z -= center.z;
+        model.position.y -= box.min.y;
+    }
+
     // --- UI Injection ---
     function injectUI() {
         // A separate file input is needed for this module
@@ -89,6 +99,7 @@
                 let triangleCount = 0;
 
                 sanitizeMaterials(asset);
+                centerAndGroundModel(asset);
 
                 asset.traverse(obj => {
                     if (obj.isMesh) {
