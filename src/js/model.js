@@ -142,7 +142,15 @@
                 let triangleCount = 0;
 
                 sanitizeMaterials(model);
-                centerAndGroundModel(model);
+                
+                // --- MODIFICATION START ---
+                // Check if the model has a baked-in position. If so, ask the user what to do.
+                // A small threshold is used to account for floating point inaccuracies.
+                const hasPosition = model.position.lengthSq() > 0.0001;
+                if (!hasPosition || confirm('This model has a saved position. Do you want to auto-center it at the origin?\n\n(Click OK to center, or Cancel to keep its position).')) {
+                    centerAndGroundModel(model);
+                }
+                // --- MODIFICATION END ---
 
                 model.traverse(obj => {
                     if (obj.isMesh) {
