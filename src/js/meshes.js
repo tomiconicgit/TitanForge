@@ -31,6 +31,30 @@
                 margin: auto; /* Center the waiting text */
             }
 
+            /* --- NEW: Remove Meshes Button --- */
+            #tf-remove-all-meshes-btn {
+                width: 100%;
+                padding: 10px 12px;
+                margin-bottom: 15px;
+                font-size: 14px;
+                font-weight: 600;
+                border: 1px solid rgba(255, 59, 48, 0.5);
+                border-radius: 8px;
+                background-color: rgba(255, 59, 48, 0.15);
+                color: #ff5959;
+                cursor: pointer;
+                transition: background-color 0.2s ease, color 0.2s ease;
+            }
+            #tf-remove-all-meshes-btn:hover {
+                background-color: rgba(255, 59, 48, 0.3);
+                color: #ff8a80;
+            }
+            #tf-remove-all-meshes-btn:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+
+
             /* Mesh list styles */
             #tf-meshes-list {
                 display: flex;
@@ -84,7 +108,7 @@
                 background: rgba(0,0,0,0.3);
                 border: 1px solid #555;
                 color: #fff; border-radius: 5px; font-size: 15px;
-                box-sizing: border-box; /* **FIX**: Include padding and border in the element's total width */
+                box-sizing: border-box;
             }
             .tf-rename-modal-content .buttons { display: flex; gap: 10px; }
             .tf-rename-modal-content button {
@@ -122,14 +146,17 @@
         panel.id = 'tf-meshes-panel';
         panel.innerHTML = `
             <div id="tf-meshes-waiting">Load a model to view its meshes.</div>
-            <div id="tf-meshes-list" style="display: none;"></div>
+            <div id="tf-meshes-editor" style="display: none;">
+                <button id="tf-remove-all-meshes-btn">Remove All Meshes 🗑️</button>
+                <div id="tf-meshes-list"></div>
+            </div>
         `;
         document.getElementById('app')?.appendChild(panel);
 
-        // **NEW**: Add rename modal to the body
+        // Rename modal
         renameModal = document.createElement('div');
         renameModal.id = 'tf-rename-modal';
-        renameModal.className = 'tf-modal-overlay'; // Re-use style from model.js
+        renameModal.className = 'tf-modal-overlay';
         renameModal.innerHTML = `
             <div class="tf-rename-modal-content">
                 <div class="title">Rename Mesh</div>
@@ -152,15 +179,12 @@
     // --- Logic ---
     function showRenameModal(visible) {
         renameModal.classList.toggle('show', visible);
-        if (!visible) {
-            meshToRename = null; // Clear the reference when closing
-        }
+        if (!visible) meshToRename = null;
     }
     
     function resetPanel() {
         activeAsset = null;
-        listContainer.innerHTML = '';
-        listContainer.style.display = 'none';
+        panel.querySelector('#tf-meshes-editor').style.display = 'none';
         waitingMessage.style.display = 'block';
     }
 
@@ -172,49 +196,83 @@
 
         const meshes = [];
         activeAsset.object.traverse(obj => {
-            if (obj.isMesh) {
-                meshes.push(obj);
-            }
+            if (obj.isMesh) meshes.push(obj);
         });
 
+        const editorEl = panel.querySelector('#tf-meshes-editor');
+        const removeBtn = panel.querySelector('#tf-remove-all-meshes-btn');
         listContainer.innerHTML = ''; // Clear previous list
         
         if (meshes.length === 0) {
-            listContainer.innerHTML = `<div id="tf-meshes-waiting">No meshes found in this model.</div>`;
+            removeBtn.disabled = true;
+            listContainer.innerHTML = `<div style="text-align: center; color: #a0a7b0;">No meshes found in this model.</div>`;
+        } else {
+             removeBtn.disabled = false;
+             meshes.forEach((mesh, index) => {
+                const row = document.createElement('div');
+                row.className = 'tf-mesh-row';
+                row.dataset.meshUuid = mesh.uuid;
+
+                const meshName = mesh.name || `Mesh ${index + 1}`;
+                const meshId = `${activeAsset.id}-mesh-${index}`;
+
+                row.innerHTML = `
+                    <span class="name" title="${meshName}">${meshName}</span>
+                    <div class="actions">
+                        <button class="rename-btn" title="Rename Mesh">
+                            <svg viewBox="0 0 20 20" width="16" height="16"><path d="M17.56 4.44l-2-2C15.38 2.26 15.19 2.18 15 2.18c-.19 0-.38.08-.53.22l-1.5 1.5L17 7.82l1.5-1.5c.3-.29.3-.76 0-1.06zM11.44 5.44L3.03 13.85c-.14.14-.22.33-.22.53V16.5c0 .28.22.5.5.5h2.12c.2 0 .39-.08.53-.22l8.41-8.41L11.44 5.44z"/></svg>
+                        </button>
+                        <label class="tf-switch">
+                            <input type="checkbox" id="${meshId}" ${mesh.visible ? 'checked' : ''}>
+                            <span class="tf-slider"></span>
+                        </label>
+                    </div>
+                `;
+                const checkbox = row.querySelector(`#${meshId}`);
+                checkbox.addEventListener('change', () => { mesh.visible = checkbox.checked; });
+                listContainer.appendChild(row);
+            });
+        }
+        
+        waitingMessage.style.display = 'none';
+        editorEl.style.display = 'block';
+    }
+
+    // --- NEW: Logic to permanently remove all meshes ---
+    function removeAllMeshes() {
+        if (!activeAsset) return;
+        
+        if (!confirm('Are you sure you want to permanently remove all meshes from this model? This cannot be undone.')) {
             return;
         }
 
-        meshes.forEach((mesh, index) => {
-            const row = document.createElement('div');
-            row.className = 'tf-mesh-row';
-            row.dataset.meshUuid = mesh.uuid; // Store UUID to find the object later
-
-            const meshName = mesh.name || `Mesh ${index + 1}`;
-            const meshId = `${activeAsset.id}-mesh-${index}`;
-
-            row.innerHTML = `
-                <span class="name" title="${meshName}">${meshName}</span>
-                <div class="actions">
-                    <button class="rename-btn" title="Rename Mesh">
-                        <svg viewBox="0 0 20 20" width="16" height="16"><path d="M17.56 4.44l-2-2C15.38 2.26 15.19 2.18 15 2.18c-.19 0-.38.08-.53.22l-1.5 1.5L17 7.82l1.5-1.5c.3-.29.3-.76 0-1.06zM11.44 5.44L3.03 13.85c-.14.14-.22.33-.22.53V16.5c0 .28.22.5.5.5h2.12c.2 0 .39-.08.53-.22l8.41-8.41L11.44 5.44z"/></svg>
-                    </button>
-                    <label class="tf-switch">
-                        <input type="checkbox" id="${meshId}" ${mesh.visible ? 'checked' : ''}>
-                        <span class="tf-slider"></span>
-                    </label>
-                </div>
-            `;
-
-            const checkbox = row.querySelector(`#${meshId}`);
-            checkbox.addEventListener('change', () => {
-                mesh.visible = checkbox.checked;
-            });
-
-            listContainer.appendChild(row);
+        const meshesToRemove = [];
+        activeAsset.object.traverse(child => {
+            if (child.isMesh) {
+                meshesToRemove.push(child);
+            }
         });
+
+        if (meshesToRemove.length === 0) {
+            window.Debug?.warn('No meshes found to remove.');
+            return;
+        }
         
-        waitingMessage.style.display = 'none';
-        listContainer.style.display = 'flex';
+        meshesToRemove.forEach(mesh => {
+            // Clean up GPU memory
+            mesh.geometry.dispose();
+            if (Array.isArray(mesh.material)) {
+                mesh.material.forEach(mat => mat.dispose());
+            } else if (mesh.material) {
+                mesh.material.dispose();
+            }
+            // Remove from scene graph
+            mesh.parent.remove(mesh);
+        });
+
+        window.Debug?.log(`Removed ${meshesToRemove.length} meshes.`);
+        // Refresh the UI to show that the list is now empty.
+        populateMeshList();
     }
 
     // --- Event Handlers ---
@@ -223,7 +281,7 @@
     }
 
     function handleAssetActivated(event) {
-        activeAsset = event.detail; // This can be an asset object or null
+        activeAsset = event.detail;
         if (activeAsset) {
             populateMeshList();
         } else {
@@ -234,6 +292,9 @@
     function wireEvents() {
         Navigation.on('change', handleNavChange);
         App.on('asset:activated', handleAssetActivated);
+
+        // --- UPDATED: Add listener for the new remove button ---
+        panel.querySelector('#tf-remove-all-meshes-btn').addEventListener('click', removeAllMeshes);
 
         // Event delegation for rename buttons
         listContainer.addEventListener('click', (e) => {
@@ -257,7 +318,6 @@
             const newName = renameInput.value.trim();
             if (newName) {
                 meshToRename.name = newName;
-                // Update the name in the UI list
                 const row = listContainer.querySelector(`[data-mesh-uuid="${meshToRename.uuid}"]`);
                 if (row) {
                     const nameEl = row.querySelector('.name');
@@ -277,10 +337,8 @@
     // --- Bootstrap ---
     function bootstrap() {
         if (window.Meshes) return;
-        
         injectUI();
         wireEvents();
-        
         window.Meshes = {};
         window.Debug?.log('Meshes Panel ready.');
     }
