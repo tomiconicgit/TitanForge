@@ -168,7 +168,8 @@
                 } else if (action === 'toggles') {
                     window.Toggles?.show();
                 } else if (action === 'animation') {
-                    window.Animation?.show();
+                    // Updated namespace to avoid clashing with Web Animations API
+                    window.TFAnimation?.show();
                 } else if (action === 'copy') {
                     window.Copy?.show();
                 }
