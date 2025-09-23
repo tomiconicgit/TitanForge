@@ -1,255 +1,130 @@
-// loading.js — Titan Forge launch screen + task tracker + manual continue
+// loading.js â Titan Forge launch screen
 (() => {
   // ---- DOM scaffold ---------------------------------------------------------
   const style = document.createElement('style');
   style.textContent = `
   :root {
-    --tf-bg:#000000; /* Solid black background */
-    --tf-fg:#e6eef6;
-    --tf-accent:#1e90ff;
-    --tf-ok:#00c853;
-    --tf-bad:#ff3b30;
-    --glass:rgba(255,255,255,.06);
-    --tf-loader-max-width: min(400px, 90vw); /* Narrower focus for content */
+    --tf-bg: #0b0f14;
+    --tf-fg: #e6eef6;
+    --tf-accent-grad: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+    --tf-bad: #ff3b30;
   }
   html, body {
-    background: var(--tf-bg); /* Ensure body also black */
-    overflow: hidden; /* Prevent scrolling during loading */
+    background: var(--tf-bg);
+    overflow: hidden;
   }
   #tf-loader {
     position:fixed; inset:0; z-index:9999; background:var(--tf-bg);
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    transition:opacity .6s ease; /* Slower fade out */
+    transition:opacity .6s ease;
     opacity:1;
     color: var(--tf-fg);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   #tf-loader.hidden { opacity:0; pointer-events:none; }
 
-  /* Logo specific styles */
+  /* Logo */
   .tf-logo-container {
-    opacity: 0; /* Initially hidden for fade-in */
-    transition: opacity 1.5s ease-in; /* Slower fade-in for logo */
-    margin-bottom: 40px; /* Space between logo and loading bar */
     text-align: center;
-  }
-  .tf-logo-container.show {
-    opacity: 1;
+    margin-bottom: 40px;
   }
   .tf-logo-text {
-    font-size: 36px; /* Larger text for logo */
+    font-size: 36px;
     font-weight: 700;
     letter-spacing: 1px;
-    color: var(--tf-fg);
-    margin-bottom: 8px;
   }
   .tf-logo-subtext {
     font-size: 16px;
     opacity: 0.7;
+    margin-top: 8px;
   }
 
-  /* Loading bar */
-  .tf-loading-area {
-    width: var(--tf-loader-max-width);
+  /* State container for spinner/button/error */
+  #tf-state-container {
+    height: 80px; /* Reserve space */
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 15px; /* Reduced gap */
-  }
-  .tf-bar-wrapper {
-    width: 100%;
-    position: relative;
-    height: 14px; /* Slightly thicker bar */
-    border-radius: 7px; /* Corresponding radius */
-    overflow: hidden;
-    background: rgba(255,255,255,.1);
-    border: none;
-  }
-  .tf-bar-fill {
-    position: absolute; left:0; top:0; bottom:0; width:0%;
-    background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
-    transition: width 0.2s ease-out; /* Direct, quick fill transition */
-  }
-  .tf-bar-fill.bad {
-    background: linear-gradient(90deg, var(--tf-bad), #ff6b6b);
-  }
-  .tf-percentage {
-    font-size: 14px;
-    color: #a0a0a0;
-    width: 100%;
-    text-align: right;
+    justify-content: center;
   }
 
-  /* Process text below bar */
-  .tf-process-text {
-    font-size: 14px;
-    opacity: 0.8;
-    height: 20px; /* Reserve space to prevent layout shifts */
-    text-align: center;
-    width: 100%;
-    color: #a0a0a0;
+  /* Spinner */
+  .tf-spinner {
+    width: 48px; height: 48px;
+    border: 5px solid rgba(255,255,255,0.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: tf-spin 1s linear infinite;
   }
+  @keyframes tf-spin { to { transform: rotate(360deg); } }
 
-  /* Continue button */
-  .tf-continue-button {
-    margin-top: 30px;
+  /* Start Button */
+  .tf-start-button {
+    display: none; /* Hidden by default */
     padding: 12px 30px;
     font-size: 16px;
     font-weight: 600;
     border-radius: 25px;
     border: none;
-    background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+    background: var(--tf-accent-grad);
     color: #fff;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    transition: all 0.3s ease;
-    opacity: 0;
-    transform: translateY(10px);
-    pointer-events: none;
+    transition: transform 0.2s ease;
   }
-  .tf-continue-button.show {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-  
-  /* Error Debugger Card */
-  .tf-debugger-card {
-    background: rgba(25, 25, 27, 0.8);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 12px;
-    padding: 15px;
-    display: none; /* Hidden by default */
-    flex-direction: column;
-    gap: 10px;
-    width: var(--tf-loader-max-width);
-    max-height: 20vh;
-    margin-top: 20px;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.5s ease, transform 0.5s ease;
-  }
-  .tf-debugger-card.show {
-    display: flex; /* Becomes visible on error */
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .tf-debugger-card .head { display: flex; align-items: center; justify-content: space-between; }
-  .tf-debugger-card .head .title { font-size: 13px; opacity: 0.8; color: var(--tf-fg); }
-  .tf-debugger-card pre {
-    margin:0; padding:10px; border-radius:8px; overflow:auto; white-space:pre-wrap; word-wrap:break-word;
-    background:rgba(0,0,0,.2); color:#cde3ff; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;
-    flex-grow: 1;
-  }
-  .tf-debugger-card .tf-copy-button {
-    padding: 6px 15px; font-size: 13px; border-radius: 10px;
-    border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.1);
-    color: var(--tf-fg); cursor: pointer; transition: background 0.2s ease;
-  }
-  .tf-debugger-card .tf-copy-button:hover { background: rgba(255,255,255,.15); }
+  .tf-start-button:hover { transform: scale(1.05); }
 
-  /* Error actions (Reload button) */
-  .tf-error-action-row {
+  /* Error Display */
+  .tf-error-display {
     display: none; /* Hidden by default */
-    justify-content: center;
-    margin-top: 20px;
-    width: var(--tf-loader-max-width);
+    text-align: center;
+    color: #ff8a80;
   }
-  .tf-error-action-row.show {
-    display: flex; /* Becomes visible on error */
+  .tf-error-display button {
+    margin-top: 15px;
+    padding: 10px 25px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 20px;
+    border: none;
+    background: var(--tf-bad);
+    color: #fff;
+    cursor: pointer;
   }
-  .tf-reload-button {
-    padding: 10px 25px; font-size: 15px; font-weight: 600; border-radius: 20px;
-    border: none; background: var(--tf-bad); color: #fff;
-    cursor: pointer; transition: background 0.2s ease, transform 0.2s ease;
-  }
-  .tf-reload-button:hover { background: #e62e2e; }
   `;
   document.head.appendChild(style);
 
   const el = document.createElement('div');
   el.id = 'tf-loader';
   el.innerHTML = `
-    <div class="tf-logo-container" id="tf-logo-container">
+    <div class="tf-logo-container">
       <div class="tf-logo-text">Titan Forge</div>
-      <div class="tf-logo-subtext">Launching...</div>
+      <div class="tf-logo-subtext">Wardrobe Tool</div>
     </div>
-
-    <div class="tf-loading-area">
-      <div class="tf-bar-wrapper">
-        <div class="tf-bar-fill" id="tf-fill"></div>
+    <div id="tf-state-container">
+      <div class="tf-spinner" id="tf-spinner"></div>
+      <button class="tf-start-button" id="tf-start-btn">Start Application</button>
+      <div class="tf-error-display" id="tf-error-display">
+        <p>Application failed to load.</p>
+        <button id="tf-reload-btn">Reload</button>
       </div>
-      <div class="tf-percentage" id="tf-pct">0%</div>
-      <div class="tf-process-text" id="tf-status">Initializing...</div>
     </div>
-
-    <button class="tf-continue-button" id="tf-continue">Continue</button>
-
-    <div class="tf-debugger-card" id="tf-debugger-card">
-      <div class="head">
-        <span class="title">Debugger output</span>
-        <button class="tf-copy-button" id="tf-copy">Copy</button>
-      </div>
-      <pre id="tf-log"></pre>
-    </div>
-
-    <div class="tf-error-action-row" id="tf-error-actions">
-      <button class="tf-reload-button" id="tf-reload-btn">Reload</button>
-    </div>
-    `;
+  `;
   document.body.appendChild(el);
 
-  const logBuffer = [];
-  const logEl = () => document.getElementById('tf-log');
-  const write = (level, msg) => {
-    const line = `[${new Date().toISOString().substr(11, 12)}] [${level}] ${msg}`;
-    logBuffer.push(line);
-    const pre = logEl();
-    if (pre) {
-      pre.textContent += (pre.textContent ? '\n' : '') + line;
-      pre.scrollTop = pre.scrollHeight;
-    }
-    if (level !== 'STATUS_UPDATE') {
-      window.dispatchEvent(new CustomEvent('tf:log', { detail: { level, msg, time: Date.now() }}));
-    }
-  };
-
+  // --- State & UI Elements ---
   const tasks = new Map();
-  const state = { done:0, failed:0, total: 0 };
+  const state = { done: 0, failed: 0, total: 0 };
   let isFinalized = false;
   
   const ui = {
-    fill: () => document.getElementById('tf-fill'),
-    pct: () => document.getElementById('tf-pct'),
-    status: () => document.getElementById('tf-status'),
-    continueBtn: () => document.getElementById('tf-continue'),
-    debuggerCard: () => document.getElementById('tf-debugger-card'),
-    errorActions: () => document.getElementById('tf-error-actions'),
+    spinner: () => document.getElementById('tf-spinner'),
+    startBtn: () => document.getElementById('tf-start-btn'),
+    errorDisplay: () => document.getElementById('tf-error-display'),
+    reloadBtn: () => document.getElementById('tf-reload-btn'),
   };
 
-  function updateBar() {
-    if (isFinalized) return;
-    const total = Math.max(state.total, 1);
-    const pct = Math.floor((state.done / total) * 100);
-    const fill = ui.fill();
-    const pctEl = ui.pct();
-    if (fill && pctEl) {
-      fill.style.width = `${pct}%`;
-      pctEl.textContent = `${pct}%`;
-    }
-  }
-
-  function setStatus(text) {
-    const s = ui.status();
-    if (s) {
-      s.textContent = text;
-      write('STATUS_UPDATE', text);
-    }
-  }
-
+  // --- Core Functions ---
   function fadeOutAndRemove() {
     el.classList.add('hidden');
     setTimeout(() => {
@@ -258,87 +133,67 @@
     }, 600);
   }
 
-  function showContinueButton() {
-    const b = ui.continueBtn();
-    if (b) {
-      b.classList.add('show');
-      b.onclick = () => {
-        write('OK', 'User confirmed. Entering app.');
-        fadeOutAndRemove(); // App is already loaded, just hide the overlay.
-      };
-    }
+  function checkCompletion() {
+      if (isFinalized) return;
+      if (state.done === state.total && state.failed === 0) {
+          setTimeout(() => finalize(true), 300);
+      }
   }
 
-  function showErrorUI(errorDetail) {
-    const card = ui.debuggerCard();
-    const errorActions = ui.errorActions();
-    if (card && errorActions) {
-      logEl().textContent = errorDetail;
-      card.classList.add('show');
-      errorActions.classList.add('show');
-      card.querySelector('#tf-copy').onclick = async () => { /* ... */ };
-      errorActions.querySelector('#tf-reload-btn').onclick = () => location.reload();
-    }
-  }
-
-  function finalize(success, errorDetail = '') {
+  function finalize(success) {
     if (isFinalized) return;
     isFinalized = true;
 
-    const fill = ui.fill();
-    if (fill) fill.classList.toggle('bad', !success);
+    const spinner = ui.spinner();
+    if (spinner) spinner.style.display = 'none';
 
     if (success) {
-      setStatus('Loading complete.');
-      write('OK', 'All tasks complete. Tap Continue to proceed.');
-      showContinueButton();
+      const startBtn = ui.startBtn();
+      if (startBtn) {
+        startBtn.style.display = 'block';
+        startBtn.onclick = fadeOutAndRemove;
+      }
     } else {
-      setStatus('Loading failed. See debugger for details.');
-      write('ERR', 'Loader halted due to errors.');
-      showErrorUI(errorDetail);
+      const errorDisplay = ui.errorDisplay();
+      if(errorDisplay) {
+        errorDisplay.style.display = 'block';
+        ui.reloadBtn().onclick = () => location.reload();
+      }
     }
   }
 
+  // --- Public API ---
   const AppLoader = {
     register(id, label) {
       if (isFinalized || tasks.has(id)) return;
-      tasks.set(id, { label, state:'pending' });
+      tasks.set(id, { label, state: 'pending' });
       state.total++;
-      setStatus(label + '...');
-      updateBar();
     },
-    complete(id, note='') {
+    complete(id) {
       const t = tasks.get(id);
       if (isFinalized || !t || t.state !== 'pending') return;
-      t.state='done';
+      t.state = 'done';
       state.done++;
-      updateBar();
-      if (state.done === state.total && state.failed === 0) {
-        setTimeout(() => finalize(true), 300);
-      }
+      checkCompletion();
     },
     fail(id, error) {
       if (isFinalized) return;
-      const t = tasks.get(id) || { label:id, state:'pending' };
+      const t = tasks.get(id) || { label: id, state: 'pending' };
       if (!tasks.has(id)) { tasks.set(id, t); state.total++; }
-      if (t.state !== 'failed') { t.state='failed'; state.failed++; }
-      const msg = (error?.stack) || (error?.message) || String(error);
-      setStatus(`Error: ${t.label}.`);
-      finalize(false, `Error: ${t.label}\n${msg}`);
+      if (t.state !== 'failed') { t.state = 'failed'; state.failed++; }
+      finalize(false);
     },
-    log(level, msg) { write(level, msg); },
+    log(level, msg) {
+        // This function is kept for compatibility with debugger.js, but does not display anything.
+        if (level === 'ERR') console.error(`[Loader Log] ${msg}`);
+    },
   };
   window.AppLoader = AppLoader;
-
-  document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('tf-logo-container').classList.add('show');
-  });
-
+  
+  // --- Event Listeners ---
   AppLoader.register('phonebook', 'Loading core modules');
   window.addEventListener('app:ready', () => AppLoader.complete('phonebook'));
   window.addEventListener('tf:task:register', e => AppLoader.register(e.detail?.id, e.detail?.label));
   window.addEventListener('tf:task:complete', e => AppLoader.complete(e.detail?.id, e.detail?.note));
   window.addEventListener('tf:task:fail', e => AppLoader.fail(e.detail?.id, e.detail?.error || 'Unknown failure'));
-
-  write('INFO', 'Loader online.');
 })();
