@@ -74,7 +74,7 @@
                     </div>
                     <div class="tf-removerig-status-text">Starting...</div>
                 </div>
-                <button id="tf-removerig-btn">Remove Rig</button>
+                <button id="tf-removerig-btn">Remove Rig & T-Pose</button>
                 <button id="tf-removerig-complete-btn">Complete</button>
             </div>
         `;
@@ -91,13 +91,11 @@
         const container = document.getElementById('tf-removerig-preview');
         if (!container || previewRenderer) return;
         const { THREE } = window.Phonebook;
-
         previewScene = new THREE.Scene();
         previewScene.background = new THREE.Color('#111418');
         previewCamera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
         previewScene.add(new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.0));
         previewScene.add(new THREE.AmbientLight(0x404040, 1.0));
-        
         previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         previewRenderer.setPixelRatio(window.devicePixelRatio);
         previewRenderer.setSize(container.clientWidth, container.clientHeight);
@@ -126,20 +124,16 @@
             previewScene.remove(previewClone, previewSkeletonHelper);
             previewSkeletonHelper?.dispose();
         }
-        
         previewClone = mainModel.object.clone();
-        
         const box = new THREE.Box3().setFromObject(previewClone);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
         previewClone.position.sub(center);
-
         const maxDim = Math.max(size.x, size.y, size.z);
         const fov = previewCamera.fov * (Math.PI / 180);
         const cameraZ = Math.abs(maxDim / 1.5 / Math.tan(fov / 2));
         previewCamera.position.set(0, 0, cameraZ);
         previewCamera.lookAt(0, 0, 0);
-
         previewScene.add(previewClone);
         previewSkeletonHelper = new THREE.SkeletonHelper(previewClone);
         previewScene.add(previewSkeletonHelper);
@@ -168,95 +162,44 @@
         statusText.textContent = status;
     }
     
-    // --- FIX: New robust model baking function ---
-    function bakeModel(sourceObject) {
-        const { THREE } = window.Phonebook;
-        const bakedGroup = new THREE.Group();
-        
-        sourceObject.updateWorldMatrix(true, true);
-
-        sourceObject.traverse(child => {
-            if (child.isSkinnedMesh) {
-                const newGeometry = new THREE.BufferGeometry();
-                const pos = child.geometry.attributes.position;
-                const normal = child.geometry.attributes.normal;
-                const uv = child.geometry.attributes.uv;
-
-                const finalPos = new Float32Array(pos.count * 3);
-                const finalNormal = new Float32Array(normal.count * 3);
-                
-                const tempPos = new THREE.Vector3();
-                const tempNormal = new THREE.Vector3();
-                const skinMatrix = new THREE.Matrix4();
-
-                for (let i = 0; i < pos.count; i++) {
-                    child.getVertexPosition(i, tempPos);
-                    tempPos.applyMatrix4(child.matrixWorld);
-                    tempPos.toArray(finalPos, i * 3);
-
-                    // Transform normals
-                    const skinIndex = child.geometry.attributes.skinIndex;
-                    const skinWeight = child.geometry.attributes.skinWeight;
-                    const skeleton = child.skeleton;
-                    
-                    skinMatrix.fromElements(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0);
-                    
-                    for (let j = 0; j < 4; j++) {
-                        const boneIndex = skinIndex.getComponent(i, j);
-                        const weight = skinWeight.getComponent(i, j);
-                        const bone = skeleton.bones[boneIndex];
-                        if (bone && weight > 0) {
-                           const boneMatrix = skeleton.boneMatrices[boneIndex];
-                           const tempMatrix = new THREE.Matrix4().fromArray(boneMatrix);
-                           skinMatrix.add(tempMatrix.multiplyScalar(weight));
-                        }
-                    }
-                    tempNormal.fromBufferAttribute(normal, i).applyMatrix3(new THREE.NormalMatrix().getNormalMatrix(skinMatrix));
-                    tempNormal.toArray(finalNormal, i * 3);
-                }
-
-                newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
-                newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormal, 3));
-                if (uv) {
-                    newGeometry.setAttribute('uv', uv); // UVs don't change
-                }
-                newGeometry.setIndex(child.geometry.index);
-
-                const newMesh = new THREE.Mesh(newGeometry, child.material);
-                newMesh.name = child.name;
-                bakedGroup.add(newMesh);
-            } else if (child.isMesh && !child.isSkinnedMesh) {
-                 // For regular meshes, just clone and apply world matrix
-                const newMesh = child.clone();
-                newMesh.applyMatrix4(child.matrixWorld);
-                bakedGroup.add(newMesh);
-            }
-        });
-        return bakedGroup;
-    }
-
     function startConversion() {
         progressBar.style.display = 'flex';
         removeBtn.style.display = 'none';
         
         setTimeout(() => {
-            updateProgress(50, 'Baking model geometry...');
-            const riglessModel = bakeModel(mainModel.object);
-            riglessModel.name = `${mainModel.name} (Rig Removed)`;
+            updateProgress(50, 'Converting to static T-pose model...');
             
+            // --- FIX: Use the proven T-pose conversion logic ---
+            const { THREE } = window.Phonebook;
+            const riglessModel = new THREE.Group();
+            
+            mainModel.object.traverse(child => {
+                if (child.isSkinnedMesh) {
+                    // Create a new non-skinned mesh using the same geometry and material.
+                    // This effectively detaches it from the skeleton, leaving it in the bind pose (T-pose).
+                    const staticMesh = new THREE.Mesh(child.geometry, child.material);
+                    staticMesh.name = child.name;
+                    riglessModel.add(staticMesh);
+                } else if (child.isMesh) {
+                    // Also clone non-skinned meshes to include them.
+                    riglessModel.add(child.clone());
+                }
+            });
+
+            // Preserve the original model's overall position, rotation, and scale.
+            riglessModel.applyMatrix4(mainModel.object.matrixWorld);
+            riglessModel.name = `${mainModel.name} (Static)`;
+            // --- End Fix ---
+
             setTimeout(() => {
                 updateProgress(75, 'Cleaning up old model...');
-                
                 window.Viewer.remove(mainModel.object);
                 
                 setTimeout(() => {
                     updateProgress(100, 'Process complete!');
-                    
                     const newModelData = { ...mainModel, id: `model-${Date.now()}`, name: riglessModel.name, object: riglessModel };
-                    
                     App.emit('asset:cleaned', { id: mainModel.id });
                     App.emit('asset:loaded', newModelData);
-                    
                     completeBtn.style.display = 'block';
                 }, 500);
             }, 500);
