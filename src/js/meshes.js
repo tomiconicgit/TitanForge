@@ -77,6 +77,7 @@
             .tf-mesh-row .icon-btn svg { fill: #a0a7b0; transition: fill 0.2s ease; }
             .tf-mesh-row .rename-btn:hover svg { fill: #fff; }
             .tf-mesh-row .delete-btn:hover svg { fill: #ff5959; }
+            .tf-mesh-row .unskin-btn:hover svg { fill: #ffc107; } /* NEW */
 
             /* Rename Modal Styles */
             .tf-rename-modal-content {
@@ -179,7 +180,6 @@
             if (obj.isMesh || obj.isSkinnedMesh) meshes.push(obj);
         });
         
-        // --- NEW: Check for proxy plane and show/hide its controls ---
         const proxyControls = panel.querySelector('#tf-proxy-controls');
         const proxyPlane = activeAsset.object.getObjectByName('ProxyPlane');
         if (proxyPlane) {
@@ -209,6 +209,9 @@
                 row.innerHTML = `
                     <span class="name" title="${meshName}">${meshName}</span>
                     <div class="actions">
+                        <button class="icon-btn unskin-btn" title="Remove Rig from Mesh" style="display: none;">
+                            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17 7h-4v2h4c1.65 0 3 1.35 3 3s-1.35 3-3 3h-4v2h4c2.76 0 5-2.24 5-5s-2.24-5-5-5zm-6 8H7c-1.65 0-3-1.35-3-3s1.35-3 3-3h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-2zm-3-4h8v2H8v-2z"></path></svg>
+                        </button>
                         <button class="icon-btn rename-btn" title="Rename Mesh">
                             <svg viewBox="0 0 20 20" width="16" height="16"><path d="M17.56 4.44l-2-2C15.38 2.26 15.19 2.18 15 2.18c-.19 0-.38.08-.53.22l-1.5 1.5L17 7.82l1.5-1.5c.3-.29.3-.76 0-1.06zM11.44 5.44L3.03 13.85c-.14.14-.22.33-.22.53V16.5c0 .28.22.5.5.5h2.12c.2 0 .39-.08.53-.22l8.41-8.41L11.44 5.44z"/></svg>
                         </button>
@@ -221,6 +224,13 @@
                         </label>
                     </div>
                 `;
+                
+                // Show the unskin button only for skinned meshes
+                if (mesh.isSkinnedMesh) {
+                    const unskinBtn = row.querySelector('.unskin-btn');
+                    if(unskinBtn) unskinBtn.style.display = 'flex';
+                }
+
                 const checkbox = row.querySelector(`#${meshId}`);
                 checkbox.addEventListener('change', () => { mesh.visible = checkbox.checked; });
                 listContainer.appendChild(row);
@@ -255,29 +265,16 @@
         activeAsset.object.traverse(node => { if (node.isBone) bones.push(node); });
 
         if (bones.length > 0) {
-            // ================== FIX START ==================
-            // A SkinnedMesh's geometry MUST have skinIndex and skinWeight attributes.
-            // We create them here and bind all vertices to the first bone.
             const vertexCount = geo.attributes.position.count;
-            const skinIndices = new Uint16Array(vertexCount * 4); // 4 bones per vertex
+            const skinIndices = new Uint16Array(vertexCount * 4);
             const skinWeights = new Float32Array(vertexCount * 4);
-
             for (let i = 0; i < vertexCount; i++) {
                 const i4 = i * 4;
-                // Bind to the first bone (index 0) with 100% weight.
-                skinIndices[i4 + 0] = 0;
-                skinIndices[i4 + 1] = 0;
-                skinIndices[i4 + 2] = 0;
-                skinIndices[i4 + 3] = 0;
-
-                skinWeights[i4 + 0] = 1.0;
-                skinWeights[i4 + 1] = 0.0;
-                skinWeights[i4 + 2] = 0.0;
-                skinWeights[i4 + 3] = 0.0;
+                skinIndices[i4] = 0; skinIndices[i4+1] = 0; skinIndices[i4+2] = 0; skinIndices[i4+3] = 0;
+                skinWeights[i4] = 1; skinWeights[i4+1] = 0; skinWeights[i4+2] = 0; skinWeights[i4+3] = 0;
             }
             geo.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndices, 4));
             geo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeights, 4));
-            // =================== FIX END ===================
 
             newMesh = new THREE.SkinnedMesh(geo, mat);
             const skeleton = new THREE.Skeleton(bones);
@@ -288,11 +285,51 @@
             window.Debug?.log('Added Proxy Plane as standard Mesh.');
         }
 
-        newMesh.name = 'ProxyPlane'; // This name is used to find and control it
-        activeAsset.object.add(newMesh); // Add it to the active model's root
+        newMesh.name = 'ProxyPlane';
+        activeAsset.object.add(newMesh);
 
         App.emit('asset:updated', { id: activeAsset.id });
         populateMeshList();
+    }
+
+    // NEW: Function to convert a SkinnedMesh to a static Mesh and remove bones.
+    function unskinMesh(meshUuid) {
+        if (!activeAsset) return;
+
+        const skinnedMesh = activeAsset.object.getObjectByProperty('uuid', meshUuid);
+        if (!skinnedMesh || !skinnedMesh.isSkinnedMesh) return;
+        
+        const parent = skinnedMesh.parent;
+        if (!parent) return;
+
+        const { THREE } = window.Phonebook;
+        
+        // 1. Create a new static Mesh with the same geometry and material.
+        const staticMesh = new THREE.Mesh(skinnedMesh.geometry, skinnedMesh.material);
+        
+        // 2. Copy the local transform from the old mesh.
+        staticMesh.name = skinnedMesh.name;
+        staticMesh.position.copy(skinnedMesh.position);
+        staticMesh.quaternion.copy(skinnedMesh.quaternion);
+        staticMesh.scale.copy(skinnedMesh.scale);
+
+        // 3. Replace the old mesh with the new one.
+        parent.add(staticMesh);
+        parent.remove(skinnedMesh);
+
+        // 4. Find and remove all bones from this asset's hierarchy.
+        const bonesToRemove = [];
+        activeAsset.object.traverse(obj => {
+            if (obj.isBone) bonesToRemove.push(obj);
+        });
+        
+        if (bonesToRemove.length > 0) {
+            window.Debug?.log(`Removing ${bonesToRemove.length} bones from asset.`);
+            bonesToRemove.forEach(bone => bone.parent.remove(bone));
+        }
+        
+        populateMeshList();
+        App.emit('asset:updated', { id: activeAsset.id });
     }
 
     function disposeMesh(mesh) {
@@ -349,7 +386,6 @@
         Navigation.on('change', handleNavChange);
         App.on('asset:activated', handleAssetActivated);
         
-        // --- NEW: Wire up new buttons and sliders ---
         panel.querySelector('#tf-add-plane-btn').addEventListener('click', addProxyPlane);
         panel.querySelector('#tf-remove-all-meshes-btn').addEventListener('click', removeAllMeshes);
 
@@ -378,7 +414,9 @@
             const row = button.closest('.tf-mesh-row');
             const uuid = row.dataset.meshUuid;
 
-            if (button.classList.contains('rename-btn')) {
+            if (button.classList.contains('unskin-btn')) {
+                unskinMesh(uuid);
+            } else if (button.classList.contains('rename-btn')) {
                 meshToRename = activeAsset.object.getObjectByProperty('uuid', uuid);
                 if (meshToRename) {
                     renameInput.value = meshToRename.name;
