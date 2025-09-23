@@ -1,7 +1,8 @@
 // src/js/export-worker.js - Runs the GLTF export process in the background.
 
-import * as THREE from 'three';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+// UPDATED: Use full CDN paths for imports to work correctly inside a worker module.
+import * as THREE from 'https://unpkg.com/three@0.157.0/build/three.module.js';
+import { GLTFExporter } from 'https://unpkg.com/three@0.157.0/examples/jsm/exporters/GLTFExporter.js';
 
 self.onmessage = (event) => {
   const { modelJson } = event.data;
