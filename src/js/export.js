@@ -3,7 +3,7 @@
     'use strict';
 
     // --- Module State ---
-    let modal, listContainer, statusText;
+    let modal, listContainer, statusText, progressBar, progressFill;
     const assets = new Map(); // Keep a local track of loaded assets
 
     // --- UI Injection ---
@@ -40,10 +40,14 @@
                 color: #e6eef6;
                 cursor: pointer;
                 text-align: left;
-                transition: background-color 0.2s ease;
+                transition: background-color 0.2s ease, opacity 0.2s ease;
             }
             #tf-export-list button:hover {
                 background-color: rgba(255,255,255,0.15);
+            }
+             #tf-export-list button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
             #tf-export-list .no-assets {
                 text-align: center;
@@ -52,6 +56,16 @@
             }
             #tf-export-status {
                 font-size: 13px; color: #a0a7b0; height: 16px; text-align: center;
+            }
+            /* Progress Bar Styles */
+            .tf-export-progress-bar {
+                width: 100%; height: 10px; background: rgba(255,255,255,0.1);
+                border-radius: 5px; overflow: hidden;
+            }
+            .tf-export-progress-fill {
+                width: 0%; height: 100%;
+                background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+                transition: width 0.3s ease-out;
             }
         `;
         document.head.appendChild(style);
@@ -62,8 +76,10 @@
         modal.innerHTML = `
             <div class="tf-export-modal-content">
                 <div class="title">Export Model as GLB</div>
-                <div id="tf-export-list">
-                    </div>
+                <div id="tf-export-list"></div>
+                <div class="tf-export-progress-bar" style="display: none;">
+                    <div class="tf-export-progress-fill"></div>
+                </div>
                 <div id="tf-export-status">Select an item to download.</div>
             </div>
         `;
@@ -71,6 +87,8 @@
 
         listContainer = modal.querySelector('#tf-export-list');
         statusText = modal.querySelector('#tf-export-status');
+        progressBar = modal.querySelector('.tf-export-progress-bar');
+        progressFill = modal.querySelector('.tf-export-progress-fill');
     }
 
     // --- Logic ---
@@ -78,6 +96,7 @@
         if (visible) {
             populateList();
             statusText.textContent = 'Select an item to download.';
+            progressBar.style.display = 'none';
         }
         modal.classList.toggle('show', visible);
     }
@@ -104,60 +123,79 @@
     function exportAsset(assetId) {
         const asset = assets.get(assetId);
         if (!asset || !asset.object) {
-            console.error('Export failed: Asset not found for ID', assetId);
             statusText.textContent = 'Error: Asset not found.';
             return;
         }
 
-        statusText.textContent = 'Preparing export...';
-
-        const { GLTFExporter, THREE } = window.Phonebook;
-        const exporter = new GLTFExporter();
-        const options = { binary: true }; // Export as a binary GLB file
+        // --- UI Setup for Progress ---
+        listContainer.querySelectorAll('button').forEach(b => b.disabled = true);
+        progressBar.style.display = 'block';
+        progressFill.style.background = ''; // Reset color from potential previous error
+        progressFill.style.width = '0%';
         
-        const objectToExport = asset.object;
+        const updateProgress = (percent, text) => {
+            progressFill.style.width = `${percent}%`;
+            statusText.textContent = `${text} (${percent}%)`;
+        };
         
-        // To bake the final world transform (especially for attached items),
-        // we clone the object, apply its world matrix, and export the clone.
-        const tempScene = new THREE.Scene();
-        const clone = objectToExport.clone();
-        
-        // Apply the object's current world matrix to the clone
-        objectToExport.updateWorldMatrix(true, true);
-        clone.applyMatrix4(objectToExport.matrixWorld);
+        updateProgress(10, 'Preparing data');
 
-        // Reset clone's local transforms so it sits at the origin in the new file
-        clone.position.set(0, 0, 0);
-        clone.rotation.set(0, 0, 0);
-        clone.scale.set(1, 1, 1);
-        
-        tempScene.add(clone);
+        // Use timeouts to simulate progress and allow the UI to update
+        // before the potentially blocking export operation begins.
+        setTimeout(() => {
+            updateProgress(40, 'Serializing scene');
 
-        exporter.parse(
-            tempScene,
-            (gltf) => { // onSuccess
-                const blob = new Blob([gltf], { type: 'model/gltf-binary' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
+            setTimeout(() => {
+                const { GLTFExporter, THREE } = window.Phonebook;
+                const exporter = new GLTFExporter();
+                const options = { binary: true };
 
-                const baseName = asset.name.endsWith('.glb') ? asset.name.slice(0, -4) : asset.name;
-                link.download = `exported_${baseName}.glb`;
-                link.href = url;
+                const objectToExport = asset.object;
+                const tempScene = new THREE.Scene();
+                const clone = objectToExport.clone();
+
+                objectToExport.updateWorldMatrix(true, false);
+                clone.applyMatrix4(objectToExport.matrixWorld);
+
+                clone.position.set(0, 0, 0);
+                clone.rotation.set(0, 0, 0);
+                clone.scale.set(1, 1, 1);
                 
-                document.body.appendChild(link);
-                link.click();
-                
-                // Cleanup
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                showModal(false); // Close modal on success
-            },
-            (error) => { // onError
-                console.error('GLTF export error:', error);
-                statusText.textContent = 'Error: Export failed. See console.';
-            },
-            options
-        );
+                tempScene.add(clone);
+
+                exporter.parse(
+                    tempScene,
+                    (gltf) => { // onSuccess
+                        updateProgress(95, 'Finalizing file');
+                        const blob = new Blob([gltf], { type: 'model/gltf-binary' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+
+                        const baseName = asset.name.endsWith('.glb') ? asset.name.slice(0, -4) : asset.name;
+                        link.download = `exported_${baseName}.glb`;
+                        link.href = url;
+                        
+                        document.body.appendChild(link);
+                        link.click();
+                        
+                        // Cleanup
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        
+                        updateProgress(100, 'Download complete!');
+                        setTimeout(() => showModal(false), 1000); // Close modal after success
+                    },
+                    (error) => { // onError
+                        console.error('GLTF export error:', error);
+                        statusText.textContent = 'Error: Export failed. See console.';
+                        progressFill.style.background = '#ff3b30'; // Error color
+                        listContainer.querySelectorAll('button').forEach(b => b.disabled = false); // Re-enable buttons
+                    },
+                    options
+                );
+
+            }, 50); // Small delay to allow 'Serializing' message to render
+        }, 300); // Initial delay for 'Preparing'
     }
     
     // --- Event Handling & Bootstrap ---
