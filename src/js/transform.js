@@ -5,7 +5,6 @@
 
     let panel, activeAsset, mainModel, boneModal;
     let waitingMessage, controlsContainer;
-    let sliders = {};
     let boneAttachBtn, boneList;
 
     // Gizmo (TransformControls)
@@ -13,31 +12,21 @@
     let gizmoEnabledCheckbox, gizmoModesContainer;
     let currentGizmoMode = 'translate';
 
-    // --- Slider config + dynamic range expand ---
-    const INITIAL = {
+    // --- Slider Configuration ---
+    // These define the initial visible range for the sliders.
+    // The text input allows entering values outside this range.
+    const SLIDER_CONFIG = {
         pos:   { min: -10, max: 10, step: 0.01 },
-        rotY:  { min: -Math.PI, max: Math.PI, step: 0.01 },
-        rotX:  { min: -Math.PI, max: Math.PI, step: 0.01 },
+        rot:   { min: -Math.PI, max: Math.PI, step: 0.01 },
         scale: { min: 0.01, max: 10, step: 0.01 },
     };
-
-    function applySliderConfig(input, { min, max, step }) {
-        input.min = String(min);
-        input.max = String(max);
-        input.step = String(step);
-    }
-
-    function expandRangeIfNeeded(input, value) {
-        const min = parseFloat(input.min), max = parseFloat(input.max);
-        const span = max - min;
-        const nearMax = value > (max - 0.05 * span);
-        const nearMin = value < (min + 0.05 * span);
-        if (nearMax || nearMin) {
-            const newMin = nearMin ? min - span : min;
-            const newMax = nearMax ? max + span : max;
-            input.min = String(newMin);
-            input.max = String(newMax);
-        }
+    
+    // --- Helper function for formatting numbers in text inputs ---
+    function formatNumber(value, key) {
+        // Rotations are in radians; show more precision for them.
+        const decimals = (key.startsWith('rot')) ? 3 : 2;
+        // Use parseFloat and toFixed to handle potential floating point inaccuracies
+        return parseFloat(Number(value).toFixed(decimals));
     }
 
     // --- UI Injection ---
@@ -57,19 +46,58 @@
             }
             #tf-transform-panel.show { display: flex; align-items: center; justify-content: center; }
             #tf-transform-waiting { color: #a0a7b0; font-size: 16px; }
-            #tf-transform-controls { width: 100%; }
-            .tf-slider-group { margin-bottom: 14px; }
+            #tf-transform-controls { width: 100%; max-width: 600px; margin: 0 auto; }
+            .tf-slider-group { margin-bottom: 12px; }
             .tf-slider-group label {
-                display: block; color: #a0a7b0; font-size: 14px; margin-bottom: 6px;
+                display: block; color: #a0a7b0; font-size: 14px; margin-bottom: 8px;
             }
-            .tf-slider-group input[type=range] {
-                width: 100%; -webkit-appearance: none; height: 5px;
-                background: rgba(255,255,255,0.1); border-radius: 5px; outline: none;
+            
+            /* NEW: Flex container for slider, buttons, and text input */
+            .tf-slider-controls {
+                display: flex;
+                align-items: center;
+                gap: 10px;
             }
-            .tf-slider-group input[type=range]::-webkit-slider-thumb {
+            .tf-slider-range {
+                flex-grow: 1; /* The slider takes up the remaining space */
+                -webkit-appearance: none;
+                height: 5px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 5px;
+                outline: none;
+            }
+            .tf-slider-range::-webkit-slider-thumb {
                 -webkit-appearance: none; appearance: none;
                 width: 18px; height: 18px; background: #2575fc; cursor: pointer;
                 border-radius: 50%; border: 2px solid #fff;
+            }
+
+            /* NEW: Arrow buttons for fine control */
+            .tf-slider-btn {
+                flex-shrink: 0;
+                width: 30px; height: 30px;
+                font-size: 20px; font-weight: 500;
+                padding: 0; line-height: 30px; text-align: center;
+                border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);
+                background: rgba(255,255,255,0.1); color: #fff; cursor: pointer;
+                transition: background-color 0.2s ease;
+            }
+            .tf-slider-btn:hover { background: rgba(255,255,255,0.15); }
+            
+            /* NEW: Text input for direct value entry */
+            .tf-slider-input {
+                flex-shrink: 0;
+                width: 75px;
+                padding: 6px;
+                background: rgba(0,0,0,0.3);
+                border: 1px solid #555;
+                color: #fff; border-radius: 5px;
+                font-size: 14px; text-align: center;
+                -moz-appearance: textfield; /* Hide number spinners in Firefox */
+            }
+            .tf-slider-input::-webkit-outer-spin-button,
+            .tf-slider-input::-webkit-inner-spin-button {
+                -webkit-appearance: none; margin: 0; /* Hide spinners in Chrome/Safari */
             }
 
             #tf-bone-attach-section { margin-bottom: 12px; }
@@ -82,22 +110,21 @@
             #tf-bone-attach-btn:hover, #tf-reset-centre-btn:hover { background: rgba(255,255,255,0.15); }
             .tf-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 
-            /* Gizmo controls */
+            /* Gizmo controls styling remains the same */
             #tf-gizmo-controls { margin: 10px 0 16px 0; display: none; }
             .tf-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
             .tf-switch { position: relative; display: inline-block; width: 30px; height: 16px; flex-shrink: 0; }
             .tf-switch input { display: none; }
-            .tf-slider {
+            .tf-slider-switch-thumb { /* Renamed from .tf-slider to avoid ambiguity */
                 position: absolute; cursor: pointer; inset: 0; background-color: rgba(255,255,255,0.2);
                 transition: .4s; border-radius: 16px;
             }
-            .tf-slider:before {
+            .tf-slider-switch-thumb:before {
                 position: absolute; content: ""; height: 12px; width: 12px; left: 2px; bottom: 2px;
                 background-color: white; transition: .4s; border-radius: 50%;
             }
-            input:checked + .tf-slider { background-color: #00c853; }
-            input:checked + .tf-slider:before { transform: translateX(14px); }
-
+            input:checked + .tf-slider-switch-thumb { background-color: #00c853; }
+            input:checked + .tf-slider-switch-thumb:before { transform: translateX(14px); }
             .tf-gizmo-modes { display:flex; gap:8px; }
             .tf-gizmo-modes button {
                 flex:1; padding:8px; font-size:13px; font-weight:600; border:none; border-radius:6px;
@@ -105,6 +132,7 @@
             }
             .tf-gizmo-modes button.active { background: rgba(37,117,252,0.35); }
             
+            /* Bone modal styling remains the same */
             .tf-bone-modal-content {
                 width: min(400px, 90vw); padding: 20px;
                 background: rgba(28, 32, 38, 0.95); border-radius: 12px;
@@ -126,6 +154,29 @@
         `;
         document.head.appendChild(style);
 
+        // --- Dynamically generate slider controls for cleaner code ---
+        const controlDefs = [
+            { key: 'pos_x', label: 'Position X', ...SLIDER_CONFIG.pos },
+            { key: 'pos_y', label: 'Position Y', ...SLIDER_CONFIG.pos },
+            { key: 'pos_z', label: 'Position Z', ...SLIDER_CONFIG.pos },
+            { key: 'scale', label: 'Scale', ...SLIDER_CONFIG.scale },
+            { key: 'rot_y', label: 'Rotation (Yaw)', ...SLIDER_CONFIG.rot },
+            { key: 'rot_x', label: 'Tilt (Pitch)', ...SLIDER_CONFIG.rot },
+        ];
+
+        const slidersHTML = controlDefs.map(c => `
+            <div class="tf-slider-group" data-control="${c.key}">
+                <label>${c.label}</label>
+                <div class="tf-slider-controls">
+                    <button class="tf-slider-btn" data-action="dec" aria-label="Decrease ${c.label}">&minus;</button>
+                    <input type="range" class="tf-slider-range" 
+                           min="${c.min}" max="${c.max}" value="0" step="${c.step}">
+                    <button class="tf-slider-btn" data-action="inc" aria-label="Increase ${c.label}">&plus;</button>
+                    <input type="number" class="tf-slider-input" step="${c.step}" value="0">
+                </div>
+            </div>
+        `).join('');
+
         panel = document.createElement('div');
         panel.id = 'tf-transform-panel';
         panel.innerHTML = `
@@ -143,7 +194,7 @@
                         <label for="tf-gizmo-enable" style="color:#e6eef6;">Gizmo</label>
                         <label class="tf-switch">
                             <input type="checkbox" id="tf-gizmo-enable">
-                            <span class="tf-slider"></span>
+                            <span class="tf-slider-switch-thumb"></span>
                         </label>
                     </div>
                     <div class="tf-gizmo-modes" id="tf-gizmo-modes">
@@ -152,31 +203,7 @@
                         <button data-mode="scale">Scale</button>
                     </div>
                 </div>
-
-                <div class="tf-slider-group">
-                    <label for="pos-x">Position X</label>
-                    <input type="range" id="pos-x">
-                </div>
-                <div class="tf-slider-group">
-                    <label for="pos-y">Position Y</label>
-                    <input type="range" id="pos-y">
-                </div>
-                <div class="tf-slider-group">
-                    <label for="pos-z">Position Z</label>
-                    <input type="range" id="pos-z">
-                </div>
-                <div class="tf-slider-group">
-                    <label for="scale">Scale</label>
-                    <input type="range" id="scale">
-                </div>
-                <div class="tf-slider-group">
-                    <label for="rot-y">Rotation (Yaw)</label>
-                    <input type="range" id="rot-y">
-                </div>
-                <div class="tf-slider-group">
-                    <label for="rot-x">Tilt (Pitch)</label>
-                    <input type="range" id="rot-x">
-                </div>
+                ${slidersHTML}
             </div>
         `;
         document.getElementById('app')?.appendChild(panel);
@@ -195,29 +222,11 @@
         
         waitingMessage = panel.querySelector('#tf-transform-waiting');
         controlsContainer = panel.querySelector('#tf-transform-controls');
-
-        sliders.pos_x = panel.querySelector('#pos-x');
-        sliders.pos_y = panel.querySelector('#pos-y');
-        sliders.pos_z = panel.querySelector('#pos-z');
-        sliders.scale = panel.querySelector('#scale');
-        sliders.rot_y = panel.querySelector('#rot-y');
-        sliders.rot_x = panel.querySelector('#rot-x');
-
-        // Apply initial ranges
-        applySliderConfig(sliders.pos_x, INITIAL.pos);
-        applySliderConfig(sliders.pos_y, INITIAL.pos);
-        applySliderConfig(sliders.pos_z, INITIAL.pos);
-        applySliderConfig(sliders.scale, INITIAL.scale);
-        applySliderConfig(sliders.rot_y, INITIAL.rotY);
-        applySliderConfig(sliders.rot_x, INITIAL.rotX);
-
         boneAttachBtn = panel.querySelector('#tf-bone-attach-btn');
         boneList = boneModal.querySelector('#tf-bone-list');
-
         gizmoEnabledCheckbox = panel.querySelector('#tf-gizmo-enable');
         gizmoModesContainer = panel.querySelector('#tf-gizmo-modes');
 
-        // Reset button
         panel.querySelector('#tf-reset-centre-btn').addEventListener('click', resetToCentre);
     }
 
@@ -231,17 +240,29 @@
         panel.style.alignItems = 'center';
         setGizmoEnabled(false);
     }
-
+    
+    // Syncs all UI controls (sliders and text boxes) to match the active asset's state
     function syncSlidersToAsset() {
         if (!activeAsset?.object) return;
         const o = activeAsset.object;
-        sliders.pos_x.value = o.position.x;
-        sliders.pos_y.value = o.position.y;
-        sliders.pos_z.value = o.position.z;
-        sliders.scale.value = o.scale.x;
-        sliders.rot_y.value = o.rotation.y;
-        sliders.rot_x.value = o.rotation.x;
+        const values = {
+            pos_x: o.position.x,
+            pos_y: o.position.y,
+            pos_z: o.position.z,
+            scale: o.scale.x,
+            rot_y: o.rotation.y,
+            rot_x: o.rotation.x,
+        };
+
+        Object.entries(values).forEach(([key, value]) => {
+            const group = controlsContainer.querySelector(`[data-control="${key}"]`);
+            if (group) {
+                group.querySelector('.tf-slider-range').value = value;
+                group.querySelector('.tf-slider-input').value = formatNumber(value, key);
+            }
+        });
     }
+
 
     function updatePanelForAsset() {
         if (!activeAsset) return;
@@ -249,7 +270,6 @@
         const showBoneAttach = !!mainModel && !activeAsset.isMainModel;
         boneSection.style.display = showBoneAttach ? 'block' : 'none';
 
-        // Gizmo controls are useful for any asset
         document.getElementById('tf-gizmo-controls').style.display = 'block';
 
         if (showBoneAttach && activeAsset.object.parent?.isBone) {
@@ -286,7 +306,6 @@
         });
     }
 
-    // Preserve visual size when parenting under a scaled/rotated bone
     function attachAssetToBone(boneName) {
         if (!activeAsset || !mainModel) return;
 
@@ -294,7 +313,7 @@
         const obj = activeAsset.object;
 
         if (boneName === 'detach') {
-            window.Viewer.scene.attach(obj); // keep world transform
+            window.Viewer.scene.attach(obj);
             boneAttachBtn.textContent = 'Attach to Bone...';
             syncSlidersToAsset();
             return;
@@ -306,7 +325,7 @@
         const worldScaleBefore = new THREE.Vector3();
         obj.getWorldScale(worldScaleBefore);
 
-        targetBone.attach(obj); // preserve world transform
+        targetBone.attach(obj);
 
         const boneWorldScale = new THREE.Vector3();
         targetBone.getWorldScale(boneWorldScale);
@@ -325,7 +344,6 @@
         if (transformControls && gizmoEnabledCheckbox.checked) transformControls.attach(obj);
     }
 
-    // Reset to centre: zero local position/rotation, keep current scale
     function resetToCentre() {
         if (!activeAsset?.object) return;
         const obj = activeAsset.object;
@@ -338,7 +356,6 @@
         }
     }
 
-    // --- Gizmo (TransformControls) setup ---
     async function ensureTransformControls() {
         if (transformControls) return transformControls;
         const mod = await import('three/addons/controls/TransformControls.js');
@@ -421,7 +438,6 @@
         App.on('asset:activated', handleAssetActivated);
         App.on('asset:cleaned', handleAssetCleaned);
 
-        // Slider -> object bindings (with dynamic range expansion)
         const apply = {
             pos_x: v => activeAsset.object.position.x = v,
             pos_y: v => activeAsset.object.position.y = v,
@@ -431,30 +447,72 @@
             rot_x: v => activeAsset.object.rotation.x = v,
         };
 
-        Object.entries(sliders).forEach(([key, input]) => {
-            input.addEventListener('input', e => {
-                if (!activeAsset?.object) return;
-                const val = parseFloat(e.target.value);
-                expandRangeIfNeeded(input, val);
-                apply[key](val);
-                if (transformControls && gizmoEnabledCheckbox.checked) {
-                    transformControls.update();
-                }
-            });
+        // --- Event Delegation for all slider controls ---
+
+        // Listen for 'input' on sliders and text boxes
+        controlsContainer.addEventListener('input', e => {
+            if (!activeAsset?.object) return;
+            const group = e.target.closest('.tf-slider-group');
+            if (!group) return;
+
+            const key = group.dataset.control;
+            const rangeInput = group.querySelector('.tf-slider-range');
+            const numberInput = group.querySelector('.tf-slider-input');
+            
+            let value;
+            // If the range slider was moved, update the text box
+            if (e.target === rangeInput) {
+                value = parseFloat(rangeInput.value);
+                numberInput.value = formatNumber(value, key);
+            } 
+            // If the text box was changed, update the range slider
+            else if (e.target === numberInput) {
+                value = parseFloat(numberInput.value);
+                if (isNaN(value)) return; // Ignore invalid text input
+                rangeInput.value = value;
+            } else {
+                return; // Not an element we care about
+            }
+            
+            apply[key](value); // Apply the transformation to the 3D object
+            
+            if (transformControls && gizmoEnabledCheckbox.checked) {
+                transformControls.update();
+            }
+        });
+
+        // Listen for 'click' on increment/decrement buttons
+        controlsContainer.addEventListener('click', e => {
+            const btn = e.target.closest('.tf-slider-btn');
+            if (!btn) return;
+            
+            const group = btn.closest('.tf-slider-group');
+            const rangeInput = group.querySelector('.tf-slider-range');
+            const numberInput = group.querySelector('.tf-slider-input');
+            const step = parseFloat(rangeInput.step);
+            
+            let currentValue = parseFloat(numberInput.value);
+            if(isNaN(currentValue)) currentValue = 0;
+
+            if (btn.dataset.action === 'inc') {
+                currentValue += step;
+            } else if (btn.dataset.action === 'dec') {
+                currentValue -= step;
+            }
+
+            // Update the number input first, then dispatch an event to sync everything else
+            numberInput.value = currentValue;
+            numberInput.dispatchEvent(new Event('input', { bubbles: true }));
         });
 
         boneAttachBtn.addEventListener('click', () => { if (mainModel) showBoneModal(true); });
-        
         boneList.addEventListener('click', e => {
             if (e.target.matches('.tf-bone-item')) {
                 attachAssetToBone(e.target.dataset.boneName);
                 showBoneModal(false);
             }
         });
-
         boneModal.addEventListener('click', e => { if (e.target === boneModal) showBoneModal(false); });
-
-        // Gizmo toggle + modes
         gizmoEnabledCheckbox.addEventListener('change', e => setGizmoEnabled(e.target.checked));
         gizmoModesContainer.addEventListener('click', async (e) => {
             const btn = e.target.closest('button');
@@ -473,7 +531,7 @@
         wireEvents();
         window.Transform = {};
         panel.classList.add('show');
-        window.Debug?.log('Transform Panel ready (extended ranges + gizmo + reset-to-centre).');
+        window.Debug?.log('Transform Panel ready (v2: precision controls).');
     }
 
     if (window.App?.glVersion) bootstrap();
