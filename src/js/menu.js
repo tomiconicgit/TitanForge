@@ -122,7 +122,6 @@
                 <button data-action="toggles">Toggles</button>
                 <button data-action="animation">Animation</button>
                 <button data-action="copy">Copy Data</button>
-                <button data-action="remove-rig">Remove Rig</button> 
             </div>
         `;
         document.getElementById('app')?.appendChild(menuContainer);
@@ -172,8 +171,6 @@
                     window.TFAnimation?.show();
                 } else if (action === 'copy') {
                     window.Copy?.show();
-                } else if (action === 'remove-rig') {
-                    window.RigRemover?.show();
                 }
             }, 300);
         });
