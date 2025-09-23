@@ -1,33 +1,53 @@
-// Import the necessary Three.js components inside the worker
+// src/js/export-worker.js - Runs the GLTF export process in the background.
+
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 self.onmessage = (event) => {
-    const sceneJson = event.data;
+  const { modelJson } = event.data;
 
-    if (!sceneJson) {
-        // Handle potential errors
-        self.postMessage({ error: 'No scene data received.' });
-        return;
-    }
+  if (!modelJson) {
+    self.postMessage({ error: 'No model data received.' });
+    return;
+  }
 
-    // 1. Deserialize the JSON back into a THREE.Scene
+  try {
+    // 1. Rebuild the Three.js object from the JSON data sent from the main thread.
     const loader = new THREE.ObjectLoader();
-    const scene = loader.parse(sceneJson);
+    const objectToExport = loader.parse(modelJson);
+    
+    // 2. Replicate the model preparation logic:
+    // Create a temporary scene to bake the object's final world transform.
+    const tempScene = new THREE.Scene();
+    const clone = objectToExport.clone();
 
-    // 2. Run the GLTFExporter
+    // The object's world matrix is already applied during serialization,
+    // so we just need to reset the clone's local transform for a clean export.
+    clone.position.set(0, 0, 0);
+    clone.rotation.set(0, 0, 0);
+    clone.scale.set(1, 1, 1);
+    
+    tempScene.add(clone);
+
+    // 3. Run the exporter. This is the heavy, blocking part.
     const exporter = new GLTFExporter();
     exporter.parse(
-        scene,
-        (glb) => {
-            // 3. Success: Send the binary data (GLB) back to the main thread
-            // The second argument is a list of "Transferable" objects to move memory, not copy.
-            self.postMessage({ glb }, [glb]);
-        },
-        (error) => {
-            // 4. Error: Send an error message back
-            self.postMessage({ error: 'Export failed within the worker.' });
-        },
-        { binary: true }
+      tempScene,
+      (glb) => {
+        // 4. Success: Send the result (an ArrayBuffer) back to the main thread.
+        // The second argument is a "Transferable" list, which moves memory
+        // instead of copying it, making it extremely fast.
+        self.postMessage({ glb }, [glb]);
+      },
+      (error) => {
+        // Handle errors from the exporter itself.
+        self.postMessage({ error: 'GLTFExporter failed during parse.' });
+      },
+      { binary: true } // Export as a binary .glb file
     );
+
+  } catch (e) {
+    // Handle any other errors during the process (e.g., parsing the JSON).
+    self.postMessage({ error: e.message });
+  }
 };
