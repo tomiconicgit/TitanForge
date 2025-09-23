@@ -271,8 +271,10 @@
         });
 
         window.Debug?.log(`Removed ${meshesToRemove.length} meshes.`);
-        // Refresh the UI to show that the list is now empty.
         populateMeshList();
+        
+        // --- NEW: Notify other modules that this asset has changed ---
+        App.emit('asset:updated', { id: activeAsset.id });
     }
 
     // --- Event Handlers ---
@@ -293,10 +295,8 @@
         Navigation.on('change', handleNavChange);
         App.on('asset:activated', handleAssetActivated);
 
-        // --- UPDATED: Add listener for the new remove button ---
         panel.querySelector('#tf-remove-all-meshes-btn').addEventListener('click', removeAllMeshes);
 
-        // Event delegation for rename buttons
         listContainer.addEventListener('click', (e) => {
             const renameButton = e.target.closest('.rename-btn');
             if (!renameButton || !activeAsset) return;
