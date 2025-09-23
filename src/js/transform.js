@@ -15,9 +15,9 @@
 
     // --- Slider config + dynamic range expand ---
     const INITIAL = {
-        pos: { min: -10, max: 10, step: 0.01 },
-        rotY: { min: -Math.PI, max: Math.PI, step: 0.01 },
-        rotX: { min: -Math.PI, max: Math.PI, step: 0.01 },
+        pos:   { min: -10, max: 10, step: 0.01 },
+        rotY:  { min: -Math.PI, max: Math.PI, step: 0.01 },
+        rotX:  { min: -Math.PI, max: Math.PI, step: 0.01 },
         scale: { min: 0.01, max: 10, step: 0.01 },
     };
 
@@ -33,7 +33,6 @@
         const nearMax = value > (max - 0.05 * span);
         const nearMin = value < (min + 0.05 * span);
         if (nearMax || nearMin) {
-            const factor = 2; // double the range
             const newMin = nearMin ? min - span : min;
             const newMax = nearMax ? max + span : max;
             input.min = String(newMin);
@@ -73,13 +72,15 @@
                 border-radius: 50%; border: 2px solid #fff;
             }
 
-            #tf-bone-attach-section { margin-bottom: 16px; }
-            #tf-bone-attach-btn {
+            #tf-bone-attach-section { margin-bottom: 12px; }
+            #tf-bone-attach-btn, #tf-reset-centre-btn {
                 width: 100%; padding: 10px; font-size: 14px; font-weight: 600;
                 border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
                 background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; text-align: center;
+                transition: background .2s ease;
             }
-            #tf-bone-attach-btn:hover { background: rgba(255,255,255,0.15); }
+            #tf-bone-attach-btn:hover, #tf-reset-centre-btn:hover { background: rgba(255,255,255,0.15); }
+            .tf-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 
             /* Gizmo controls */
             #tf-gizmo-controls { margin: 10px 0 16px 0; display: none; }
@@ -131,7 +132,10 @@
             <div id="tf-transform-waiting">Load a model to begin transforming.</div>
             <div id="tf-transform-controls" style="display: none;">
                 <div id="tf-bone-attach-section" style="display: none;">
-                    <button id="tf-bone-attach-btn">Attach to Bone...</button>
+                    <div class="tf-actions">
+                        <button id="tf-bone-attach-btn">Attach to Bone...</button>
+                        <button id="tf-reset-centre-btn">Reset to Centre</button>
+                    </div>
                 </div>
 
                 <div id="tf-gizmo-controls">
@@ -212,6 +216,9 @@
 
         gizmoEnabledCheckbox = panel.querySelector('#tf-gizmo-enable');
         gizmoModesContainer = panel.querySelector('#tf-gizmo-modes');
+
+        // Reset button
+        panel.querySelector('#tf-reset-centre-btn').addEventListener('click', resetToCentre);
     }
 
     function showBoneModal(visible) { boneModal.classList.toggle('show', visible); }
@@ -242,7 +249,7 @@
         const showBoneAttach = !!mainModel && !activeAsset.isMainModel;
         boneSection.style.display = showBoneAttach ? 'block' : 'none';
 
-        // Gizmo controls are useful for ANY asset (main or not); show when controls visible
+        // Gizmo controls are useful for any asset
         document.getElementById('tf-gizmo-controls').style.display = 'block';
 
         if (showBoneAttach && activeAsset.object.parent?.isBone) {
@@ -318,6 +325,19 @@
         if (transformControls && gizmoEnabledCheckbox.checked) transformControls.attach(obj);
     }
 
+    // Reset to centre: zero local position/rotation, keep current scale
+    function resetToCentre() {
+        if (!activeAsset?.object) return;
+        const obj = activeAsset.object;
+        obj.position.set(0, 0, 0);
+        obj.rotation.set(0, 0, 0);
+        obj.updateMatrixWorld(true);
+        syncSlidersToAsset();
+        if (transformControls && gizmoEnabledCheckbox.checked) {
+            transformControls.update();
+        }
+    }
+
     // --- Gizmo (TransformControls) setup ---
     async function ensureTransformControls() {
         if (transformControls) return transformControls;
@@ -330,7 +350,6 @@
             if (orbit) orbit.enabled = !e.value;
         });
         transformControls.addEventListener('change', () => {
-            // keep sliders in sync during gizmo moves
             if (activeAsset?.object) syncSlidersToAsset();
         });
         scene.add(transformControls);
@@ -341,7 +360,6 @@
         if (!enabled) {
             if (transformControls) {
                 transformControls.detach();
-                // keep it around for reuse; no need to remove from scene
             }
             return;
         }
@@ -417,11 +435,8 @@
             input.addEventListener('input', e => {
                 if (!activeAsset?.object) return;
                 const val = parseFloat(e.target.value);
-                // expand range as needed
                 expandRangeIfNeeded(input, val);
-                // apply
                 apply[key](val);
-                // keep gizmo attached
                 if (transformControls && gizmoEnabledCheckbox.checked) {
                     transformControls.update();
                 }
@@ -458,7 +473,7 @@
         wireEvents();
         window.Transform = {};
         panel.classList.add('show');
-        window.Debug?.log('Transform Panel ready (extended ranges + gizmo).');
+        window.Debug?.log('Transform Panel ready (extended ranges + gizmo + reset-to-centre).');
     }
 
     if (window.App?.glVersion) bootstrap();
