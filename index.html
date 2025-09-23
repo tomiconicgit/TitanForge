@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>Wardrobe Tool — Rebuild (Shell)</title>
+  <title>Wardrobe Tool â Rebuild (Shell)</title>
 
   <link rel="manifest" href='data:application/manifest+json,{
-    "name":"Wardrobe & Equipment — Rebuild",
+    "name":"Wardrobe & Equipment âmdash Rebuild",
     "short_name":"Wardrobe2",
     "start_url":".",
     "display":"standalone",
@@ -56,14 +56,15 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { GLTFLoader }   from 'three/addons/loaders/GLTFLoader.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
     // Expose the phonebook for subsequent modules
-    window.Phonebook = { THREE, OrbitControls, GLTFLoader, version: '0.157.0' };
+    window.Phonebook = { THREE, OrbitControls, GLTFLoader, GLTFExporter, version: '0.157.0' };
 
     // Signal to the loader that the phonebook is ready
     window.dispatchEvent(new CustomEvent('app:ready', { detail: { modules: Object.keys(window.Phonebook) }}));
     console.log('[Wardrobe2] entry loaded:', window.Phonebook);
-    if (window.Debug) Debug.log('Phonebook ready: three@0.157.0, OrbitControls, GLTFLoader');
+    if (window.Debug) Debug.log('Phonebook ready: three@0.157.0, OrbitControls, GLTFLoader, GLTFExporter');
 
     // complete entry task
     if (window.Debug && Debug.task) Debug.task.done('entry', 'Entry OK');
