@@ -1,128 +1,154 @@
-// src/js/export-worker.js — Incremental, zero-copy GLB export builder (three@0.157)
+// src/js/export-worker.js — Streamed GLB export with rig + textures (three@0.157)
 import * as THREE from 'https://unpkg.com/three@0.157.0/build/three.module.js';
 import { GLTFExporter } from 'https://unpkg.com/three@0.157.0/examples/jsm/exporters/GLTFExporter.js';
 
 let group = null;
-let expectedCount = 0;
-let receivedCount = 0;
+let expected = 0;
+let received = 0;
 let aborted = false;
 
-function makeMaterial(m) {
-  // Minimal PBR material (keeps file light; textures can be added later if needed)
-  const mat = new THREE.MeshStandardMaterial({
-    color: (m && typeof m.color === 'number') ? new THREE.Color(m.color) : new THREE.Color(0xffffff),
-    metalness: (m && typeof m.metalness === 'number') ? m.metalness : 0.0,
-    roughness: (m && typeof m.roughness === 'number') ? m.roughness : 0.9,
-    transparent: !!(m && m.transparent),
-    opacity: (m && typeof m.opacity === 'number') ? m.opacity : 1.0,
-    side: (m && m.doubleSided) ? THREE.DoubleSide : THREE.FrontSide,
-    name: (m && m.name) || 'Material'
+// Texture cache (by id sent from main thread)
+const texCache = new Map();
+
+function buildTexture(desc) {
+  if (!desc) return null;
+  const img = texCache.get(desc.id);
+  if (!img) return null;
+
+  const t = new THREE.Texture(img);
+  t.needsUpdate = true;
+  t.flipY = !!desc.flipY;
+  t.colorSpace = desc.srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+
+  if (desc.offset) t.offset.fromArray(desc.offset);
+  if (desc.repeat) t.repeat.fromArray(desc.repeat);
+  if (typeof desc.rotation === 'number') t.rotation = desc.rotation;
+  if (desc.center) t.center.fromArray(desc.center);
+  return t;
+}
+
+function buildMaterial(md) {
+  // Single material descriptor
+  const m = new THREE.MeshStandardMaterial({
+    name: md.name || 'Material',
+    color: new THREE.Color(md.color ?? 0xffffff),
+    metalness: (typeof md.metalness === 'number') ? md.metalness : 0.0,
+    roughness: (typeof md.roughness === 'number') ? md.roughness : 0.9,
+    transparent: !!md.transparent,
+    opacity: (typeof md.opacity === 'number') ? md.opacity : 1.0,
+    side: md.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+    emissive: new THREE.Color(md.emissive ?? 0x000000),
+    emissiveIntensity: (typeof md.emissiveIntensity === 'number') ? md.emissiveIntensity : 1.0
   });
-  return mat;
+
+  // Maps (if present)
+  m.map           = buildTexture(md.maps?.map)           || null;
+  m.normalMap     = buildTexture(md.maps?.normalMap)     || null;
+  m.roughnessMap  = buildTexture(md.maps?.roughnessMap)  || null;
+  m.metalnessMap  = buildTexture(md.maps?.metalnessMap)  || null;
+  m.aoMap         = buildTexture(md.maps?.aoMap)         || null;
+  m.emissiveMap   = buildTexture(md.maps?.emissiveMap)   || null;
+
+  return m;
 }
 
-function bufferAttr(desc) {
-  if (!desc || !desc.buffer) return null;
-  const ctor = globalThis[desc.arrayType] || Float32Array;
-  const array = new ctor(desc.buffer);
-  return new THREE.BufferAttribute(array, desc.itemSize, !!desc.normalized);
+function attrFrom(desc) {
+  if (!desc?.buffer) return null;
+  const Ctor = globalThis[desc.arrayType] || Float32Array;
+  const arr = new Ctor(desc.buffer); // buffer is a cloned copy from main thread
+  return new THREE.BufferAttribute(arr, desc.itemSize, !!desc.normalized);
 }
 
-function rebuildGeometry(gd) {
+function buildGeometry(gd) {
   const geo = new THREE.BufferGeometry();
   if (gd.attributes) {
-    for (const key of Object.keys(gd.attributes)) {
-      const attr = bufferAttr(gd.attributes[key]);
-      if (attr) geo.setAttribute(key, attr);
+    for (const k of Object.keys(gd.attributes)) {
+      const a = attrFrom(gd.attributes[k]);
+      if (a) geo.setAttribute(k, a);
     }
   }
-  if (gd.index && gd.index.buffer) {
-    const idxCtor = globalThis[gd.index.arrayType] || Uint32Array;
-    const idx = new idxCtor(gd.index.buffer);
+  if (gd.index?.buffer) {
+    const IdxCtor = globalThis[gd.index.arrayType] || Uint32Array;
+    const idx = new IdxCtor(gd.index.buffer);
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
   }
-  if (gd.groups && gd.groups.length) {
+  if (gd.groups?.length) {
     gd.groups.forEach(g => geo.addGroup(g.start, g.count, g.materialIndex || 0));
   }
   if (gd.boundingBox) {
-    const bb = new THREE.Box3(
+    geo.boundingBox = new THREE.Box3(
       new THREE.Vector3().fromArray(gd.boundingBox.min),
       new THREE.Vector3().fromArray(gd.boundingBox.max)
     );
-    geo.boundingBox = bb;
   }
   return geo;
 }
 
-function rebuildBones(bonesDesc) {
-  // Create Bones and wire hierarchy by parentIndex
-  const bones = bonesDesc.map(b => {
+function rebuildBones(skel) {
+  const bones = skel.bones.map(b => {
     const bone = new THREE.Bone();
     bone.name = b.name || '';
     bone.matrix.fromArray(b.localMatrix);
     bone.matrix.decompose(bone.position, bone.quaternion, bone.scale);
     return bone;
   });
-  bonesDesc.forEach((b, i) => {
-    if (b.parentIndex !== -1 && bones[b.parentIndex]) {
-      bones[b.parentIndex].add(bones[i]);
-    }
+  skel.bones.forEach((b, i) => {
+    if (b.parentIndex !== -1 && bones[b.parentIndex]) bones[b.parentIndex].add(bones[i]);
   });
-  // Find root (first with no parent)
-  const rootIndex = bonesDesc.findIndex(b => b.parentIndex === -1) ?? 0;
-  return { bones, root: bones[rootIndex] || bones[0] };
+  const rootIndex = skel.bones.findIndex(b => b.parentIndex === -1);
+  return { bones, root: bones[rootIndex >= 0 ? rootIndex : 0] };
 }
 
-function addMesh(payload) {
-  const geometry = rebuildGeometry(payload.geometry);
-  const material = Array.isArray(payload.material)
-    ? payload.material.map(m => makeMaterial(m))
-    : makeMaterial(payload.material);
+function addMesh(msg) {
+  // Register any incoming textures first
+  if (msg.attachments?.length) {
+    for (const a of msg.attachments) {
+      // a: { id, bitmap }
+      texCache.set(a.id, a.bitmap);
+    }
+  }
 
-  let mesh;
+  const p = msg.payload;
+  const geom = buildGeometry(p.geometry);
 
-  if (payload.type === 'SkinnedMesh') {
-    // Rebuild skeleton
-    const { bones, root } = rebuildBones(payload.skeleton.bones);
+  let material;
+  if (Array.isArray(p.material)) {
+    material = p.material.map(buildMaterial);
+  } else {
+    material = buildMaterial(p.material);
+  }
 
-    const boneInverses = payload.skeleton.boneInverses?.map(m => {
-      const mat = new THREE.Matrix4();
-      mat.fromArray(m);
-      return mat;
-    }) || [];
-
+  let obj;
+  if (p.type === 'SkinnedMesh') {
+    const { bones, root } = rebuildBones(p.skeleton);
+    const boneInverses = (p.skeleton.boneInverses || []).map(m => new THREE.Matrix4().fromArray(m));
     const skeleton = new THREE.Skeleton(bones, boneInverses.length ? boneInverses : undefined);
 
-    mesh = new THREE.SkinnedMesh(geometry, material);
-    // Attach bones under the mesh so exporter picks them up as a node tree
-    mesh.add(root);
-    mesh.bind(skeleton);
-
-    // Respect provided bindMatrix if present
-    if (payload.skeleton.bindMatrix) {
-      const bindMatrix = new THREE.Matrix4().fromArray(payload.skeleton.bindMatrix);
-      mesh.bind(skeleton, bindMatrix);
+    obj = new THREE.SkinnedMesh(geom, material);
+    obj.add(root);
+    if (p.skeleton.bindMatrix) {
+      obj.bind(skeleton, new THREE.Matrix4().fromArray(p.skeleton.bindMatrix));
+    } else {
+      obj.bind(skeleton);
     }
-
   } else {
-    mesh = new THREE.Mesh(geometry, material);
+    obj = new THREE.Mesh(geom, material);
   }
 
-  mesh.name = payload.name || '';
-  if (payload.matrixWorld && payload.matrixWorld.length === 16) {
-    mesh.matrix.fromArray(payload.matrixWorld);
-    mesh.matrixAutoUpdate = false;
+  obj.name = p.name || '';
+  if (p.matrixWorld?.length === 16) {
+    obj.matrix.fromArray(p.matrixWorld);
+    obj.matrixAutoUpdate = false;
   }
 
-  group.add(mesh);
+  group.add(obj);
 }
 
-self.onmessage = async (e) => {
+self.onmessage = (e) => {
   const { type } = e.data || {};
+
   if (type === 'begin') {
-    aborted = false;
-    receivedCount = 0;
-    expectedCount = e.data.count || 0;
+    aborted = false; received = 0; expected = e.data.count || 0;
     group = new THREE.Group();
     self.postMessage({ type: 'ready' });
     return;
@@ -131,13 +157,13 @@ self.onmessage = async (e) => {
   if (type === 'mesh') {
     if (aborted || !group) return;
     try {
-      addMesh(e.data.payload);
-      receivedCount++;
-      if (receivedCount % 8 === 0 || receivedCount === expectedCount) {
-        self.postMessage({ type: 'mesh:ok', received: receivedCount, total: expectedCount });
+      addMesh(e.data);
+      received++;
+      if (received % 6 === 0 || received === expected) {
+        self.postMessage({ type: 'mesh:ok', received, total: expected });
       }
     } catch (err) {
-      self.postMessage({ type: 'error', message: 'Failed to add mesh: ' + (err?.message || err) });
+      self.postMessage({ type: 'error', message: 'Add mesh failed: ' + (err?.message || err) });
     }
     return;
   }
@@ -154,16 +180,19 @@ self.onmessage = async (e) => {
         (glb) => {
           self.postMessage({ type: 'done', glb }, [glb]); // transfer
           group = null;
+          texCache.clear();
         },
         (err) => {
           self.postMessage({ type: 'error', message: 'GLTFExporter failed: ' + (err?.message || err) });
           group = null;
+          texCache.clear();
         },
         { binary: true }
       );
     } catch (err) {
       self.postMessage({ type: 'error', message: err?.message || String(err) });
       group = null;
+      texCache.clear();
     }
     return;
   }
@@ -171,6 +200,7 @@ self.onmessage = async (e) => {
   if (type === 'abort') {
     aborted = true;
     group = null;
+    texCache.clear();
     self.postMessage({ type: 'aborted' });
   }
 };
