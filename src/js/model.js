@@ -22,9 +22,16 @@
             if (!child.isMesh || !child.material) return;
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             mats.forEach(mat => {
-                mat.transparent = false;
-                mat.opacity = 1;
-                mat.alphaTest = 0;
+                // ================== FIX START ==================
+                // Only enforce opaque settings if the material is NOT already transparent.
+                // This preserves the transparency of the proxy plane or other glass-like materials.
+                if (!mat.transparent) {
+                    mat.transparent = false;
+                    mat.opacity = 1;
+                    mat.alphaTest = 0;
+                }
+                // =================== FIX END ===================
+
                 mat.depthWrite = true;
                 mat.depthTest = true;
                 mat.side = THREE.FrontSide;
