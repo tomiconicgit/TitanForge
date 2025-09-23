@@ -1,9 +1,20 @@
-// src/js/export.js — Streams meshes + rig + active textures into GLB (mobile-safe)
+// src/js/export.js — Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
 (function () {
   'use strict';
 
   let modal, listContainer, statusText, progressBar, progressFill, cancelBtn;
   const assets = new Map();
+  let isExporting = false;
+  let cancelRequested = false;
+
+  // Lazy-load SkeletonUtils when needed (keeps boot fast)
+  let SkeletonUtils = null;
+  async function ensureSkeletonUtils() {
+    if (SkeletonUtils) return SkeletonUtils;
+    const mod = await import('three/addons/utils/SkeletonUtils.js');
+    SkeletonUtils = mod; // { clone }
+    return SkeletonUtils;
+  }
 
   function injectUI() {
     const style = document.createElement('style');
@@ -64,282 +75,220 @@
       const b = document.createElement('button');
       b.textContent = asset.name;
       b.dataset.assetId = id;
+      b.disabled = isExporting;
       listContainer.appendChild(b);
     }
   }
 
-  // ---------- Streaming payload builders ----------
-  const nextIdle = (ms = 16) => new Promise(r => (self.requestIdleCallback || setTimeout)(r, ms));
-  const cloneBuf = (buf) => (buf?.slice ? buf.slice(0) : buf); // keep live geometry intact
-
-  function attrDesc(attr) {
-    if (!attr) return null;
-    return {
-      arrayType: attr.array.constructor.name,
-      itemSize: attr.itemSize,
-      normalized: !!attr.normalized,
-      buffer: cloneBuf(attr.array.buffer)
-    };
-  }
-
-  function geometryDesc(g) {
-    const d = {
-      attributes: {
-        position: attrDesc(g.getAttribute('position')),
-        normal:   attrDesc(g.getAttribute('normal')),
-        uv:       attrDesc(g.getAttribute('uv')),
-        color:    attrDesc(g.getAttribute('color')),
-        tangent:  attrDesc(g.getAttribute('tangent')),
-        skinIndex: attrDesc(g.getAttribute('skinIndex')),
-        skinWeight: attrDesc(g.getAttribute('skinWeight')),
-      },
-      index: g.index ? {
-        arrayType: g.index.array.constructor.name,
-        buffer: cloneBuf(g.index.array.buffer)
-      } : null,
-      groups: Array.isArray(g.groups) && g.groups.length ? g.groups.map(x => ({ start:x.start, count:x.count, materialIndex:x.materialIndex||0 })) : []
-    };
-    if (g.boundingBox) d.boundingBox = { min: g.boundingBox.min.toArray(), max: g.boundingBox.max.toArray() };
-    return d;
-  }
-
-  function skeletonDesc(sm) {
-    const s = sm.skeleton;
-    return {
-      bones: s.bones.map(b => ({
-        name: b.name || '',
-        localMatrix: b.matrix.toArray(),
-        parentIndex: s.bones.indexOf(b.parent)
-      })),
-      bindMatrix: sm.bindMatrix?.toArray?.() || null,
-      boneInverses: (s.boneInverses||[]).map(m => m.toArray())
-    };
-  }
-
-  // Texture streaming
-  const texIdCache = new Map(); // Texture -> id
-  let texSeq = 1;
-
-  async function mapDesc(tex, role) {
-    if (!tex || !tex.image) return null;
-
-    let id = texIdCache.get(tex);
-    let attachment = null;
-
-    if (!id) {
-      id = `tx_${texSeq++}`;
-      texIdCache.set(tex, id);
-
-      // Convert source to ImageBitmap (fast + transferable)
-      let bitmap;
-      try {
-        bitmap = await createImageBitmap(tex.image);
-      } catch {
-        // Fallback: draw to canvas then to ImageBitmap
-        const w = tex.image.width || 1, h = tex.image.height || 1;
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(tex.image, 0, 0, w, h);
-        if ('transferControlToOffscreen' in c) {
-          const off = c.transferControlToOffscreen();
-          bitmap = await createImageBitmap(off); // Safari may still accept
-        } else {
-          bitmap = await createImageBitmap(c);
-        }
-      }
-      attachment = { id, bitmap };
-    }
-
-    return {
-      desc: {
-        id,
-        role,
-        srgb: (role === 'map' || role === 'emissiveMap'),
-        flipY: !!tex.flipY,
-        offset: tex.offset ? [tex.offset.x, tex.offset.y] : undefined,
-        repeat: tex.repeat ? [tex.repeat.x, tex.repeat.y] : undefined,
-        rotation: typeof tex.rotation === 'number' ? tex.rotation : undefined,
-        center: tex.center ? [tex.center.x, tex.center.y] : undefined
-      },
-      attachment
-    };
-  }
-
-  async function materialDesc(mat) {
-    const d = {
-      name: mat.name || '',
-      color: (mat.color && mat.color.getHex()) || 0xffffff,
-      metalness: (typeof mat.metalness === 'number') ? mat.metalness : 0.0,
-      roughness: (typeof mat.roughness === 'number') ? mat.roughness : 0.9,
-      transparent: !!mat.transparent,
-      opacity: (typeof mat.opacity === 'number') ? mat.opacity : 1.0,
-      doubleSided: mat.side === window.Phonebook.THREE.DoubleSide,
-      emissive: (mat.emissive && mat.emissive.getHex()) || 0x000000,
-      emissiveIntensity: (typeof mat.emissiveIntensity === 'number') ? mat.emissiveIntensity : 1.0,
-      maps: {}
-    };
-
-    const attachments = [];
-    const roles = ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap'];
-
-    for (const role of roles) {
-      const pair = await mapDesc(mat[role], role);
-      if (pair) {
-        d.maps[role] = pair.desc;
-        if (pair.attachment) attachments.push(pair.attachment);
-      }
-    }
-
-    return { matDesc: d, attachments };
-  }
-
-  async function materialArrayDesc(material) {
-    if (Array.isArray(material)) {
-      const mats = [];
-      const att = [];
-      for (const m of material) {
-        const { matDesc, attachments } = await materialDesc(m);
-        mats.push(matDesc);
-        att.push(...attachments);
-      }
-      return { mat: mats, attachments: att };
-    } else {
-      const { matDesc, attachments } = await materialDesc(material);
-      return { mat: matDesc, attachments };
-    }
-  }
+  // ---------- Helpers ----------
+  const idle = (ms = 16) => new Promise(r => (self.requestIdleCallback || setTimeout)(r, ms));
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   function updateProgress(p, label) {
     progressFill.style.width = `${p}%`;
     statusText.textContent = `${label} (${Math.round(p)}%)`;
   }
 
-  function exportAsset(assetId) {
+  function disposeClone(root) {
+    root.traverse(obj => {
+      if (obj.isMesh || obj.isSkinnedMesh) {
+        if (obj.geometry) obj.geometry.dispose();
+        // materials use the original textures; don't dispose textures here
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose?.());
+        else obj.material?.dispose?.();
+      }
+    });
+  }
+
+  function prepareMaterialForExport(mat, THREE) {
+    // Ensure MeshStandardMaterial + sane texture flags
+    if (!mat || mat.type !== 'MeshStandardMaterial') {
+      const m = new THREE.MeshStandardMaterial();
+      // Copy basic color/rough/metal if present
+      if (mat?.color) m.color.copy(mat.color);
+      if (typeof mat?.roughness === 'number') m.roughness = mat.roughness;
+      if (typeof mat?.metalness === 'number') m.metalness = mat.metalness;
+      mat = m;
+    }
+    // FlipY must be false for glTF; color space sRGB only for baseColor/emissive
+    const maps = ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap'];
+    for (const k of maps) {
+      const t = mat[k];
+      if (!t) continue;
+      t.flipY = false;
+      if (k === 'map' || k === 'emissiveMap') {
+        t.colorSpace = THREE.SRGBColorSpace;
+      } else {
+        t.colorSpace = THREE.NoColorSpace;
+      }
+    }
+    mat.needsUpdate = true;
+    return mat;
+  }
+
+  async function buildExportRoot(asset) {
+    const { THREE, GLTFExporter } = window.Phonebook;
+    await ensureSkeletonUtils();
+
+    const src = asset.object;
+    src.updateWorldMatrix(true, true);
+
+    // Deep clone (preserves skeleton links)
+    const clone = SkeletonUtils.clone(src);
+
+    // Bake root world matrix without modifying bones/skin:
+    // put the clone under a neutral group, and give the clone the world matrix.
+    const root = new THREE.Group();
+    root.name = `ExportRoot_${asset.name}`;
+    root.add(clone);
+
+    // Apply the original's world transform to the clone as its local transform
+    clone.matrix.copy(src.matrixWorld);
+    clone.matrixAutoUpdate = false;
+    clone.updateMatrixWorld(true);
+
+    // Prune hidden nodes & sanitize materials in small batches
+    let processed = 0;
+    const toProcess = [];
+    root.traverse(o => toProcess.push(o));
+
+    for (let i = 0; i < toProcess.length; i++) {
+      if (cancelRequested) throw new Error('cancelled');
+      const o = toProcess[i];
+
+      // Drop non-visible meshes
+      if ((o.isMesh || o.isSkinnedMesh) && !o.visible) {
+        o.parent?.remove(o);
+        continue;
+      }
+
+      if (o.isMesh || o.isSkinnedMesh) {
+        // Tighten geometry draw range if set
+        if (o.geometry && typeof o.geometry.drawRange?.count === 'number' && o.geometry.drawRange.count >= 0) {
+          // nothing to do; GLTFExporter honors truncateDrawRange
+        }
+        // Normalize materials and texture flags
+        if (Array.isArray(o.material)) {
+          o.material = o.material.map(m => prepareMaterialForExport(m, THREE));
+        } else {
+          o.material = prepareMaterialForExport(o.material, THREE);
+        }
+      }
+
+      processed++;
+      if ((processed % 20) === 0) await idle(12); // yield periodically
+    }
+
+    return { root, GLTFExporter, THREE };
+  }
+
+  async function exportAsset(assetId) {
+    if (isExporting) return;
     const asset = assets.get(assetId);
     if (!asset?.object) {
       statusText.textContent = 'Error: Asset not found.';
       return;
     }
 
+    // UI state
+    isExporting = true;
+    cancelRequested = false;
     listContainer.querySelectorAll('button').forEach(b => b.disabled = true);
     progressBar.style.display = 'block';
     cancelBtn.style.display = 'block';
     progressFill.style.background = '';
-    updateProgress(6, 'Preparing export');
-
-    const worker = new Worker('./src/js/export-worker.js', { type: 'module' });
-    let cancelled = false;
-
-    const cleanup = () => { cancelBtn.style.display = 'none'; try { worker.terminate(); } catch {} };
+    updateProgress(4, 'Preparing export');
 
     cancelBtn.onclick = () => {
-      cancelled = true;
-      try { worker.postMessage({ type: 'abort' }); } catch {}
-      cleanup();
-      updateProgress(100, 'Export cancelled');
-      progressFill.style.background = '#ff3b30';
-      listContainer.querySelectorAll('button').forEach(b => b.disabled = false);
-    };
-
-    worker.onerror = (err) => {
-      console.error('Worker error:', err);
-      cleanup();
-      updateProgress(100, 'Worker error');
-      progressFill.style.background = '#ff3b30';
-      listContainer.querySelectorAll('button').forEach(b => b.disabled = false);
-    };
-
-    worker.onmessage = (ev) => {
-      const m = ev.data || {};
-      if (m.type === 'ready') {
-        // Stream meshes after ready
-        (async () => {
-          // Count first
-          let total = 0;
-          asset.object.traverse(o => { if (o.isMesh || o.isSkinnedMesh) total++; });
-          let sent = 0;
-
-          // Stream in traversal order
-          const toSend = [];
-          asset.object.updateWorldMatrix(true, true);
-          asset.object.traverse(o => { if (o.isMesh || o.isSkinnedMesh) toSend.push(o); });
-
-          for (const obj of toSend) {
-            if (cancelled) return;
-
-            const geom = obj.geometry;
-            if (!geom || !geom.getAttribute('position')) { sent++; continue; }
-
-            const { THREE } = window.Phonebook;
-
-            const payload = {
-              type: obj.isSkinnedMesh ? 'SkinnedMesh' : 'Mesh',
-              name: obj.name || '',
-              matrixWorld: obj.matrixWorld.toArray(),
-              geometry: geometryDesc(geom),
-              material: null,
-              skeleton: null
-            };
-
-            // Materials (+ attachments for textures)
-            const { mat, attachments } = await materialArrayDesc(obj.material || new THREE.MeshStandardMaterial());
-            payload.material = mat;
-
-            if (obj.isSkinnedMesh) payload.skeleton = skeletonDesc(obj);
-
-            // Build transfer list
-            const transfers = [];
-            // geometry buffers
-            const A = payload.geometry.attributes;
-            for (const k in A) if (A[k]?.buffer) transfers.push(A[k].buffer);
-            if (payload.geometry.index?.buffer) transfers.push(payload.geometry.index.buffer);
-            // texture bitmaps
-            for (const a of attachments) transfers.push(a.bitmap);
-
-            worker.postMessage({ type: 'mesh', payload, attachments }, transfers);
-
-            sent++;
-            updateProgress(10 + (sent / Math.max(1, total)) * 65, `Sending mesh ${sent}/${total}`);
-            await nextIdle(); // yield to keep UI smooth
-          }
-
-          if (cancelled) return;
-          updateProgress(80, 'Finalising GLB');
-          worker.postMessage({ type: 'export' });
-        })();
-      } else if (m.type === 'mesh:ok') {
-        updateProgress(10 + (m.received / Math.max(1, m.total)) * 65, `Received ${m.received}/${m.total}`);
-      } else if (m.type === 'done' && m.glb) {
-        if (cancelled) return;
-        updateProgress(95, 'Creating file');
-        const blob = new Blob([m.glb], { type: 'model/gltf-binary' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const base = assets.get(assetId).name.replace(/\.glb$/i, '');
-        a.download = `exported_${base}.glb`;
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        cleanup();
-        updateProgress(100, 'Download complete!');
-        setTimeout(() => showModal(false), 1200);
-      } else if (m.type === 'error') {
-        console.error('Export error:', m.message);
-        cleanup();
-        updateProgress(100, 'Export failed');
+      if (isExporting) {
+        cancelRequested = true; // can cancel during prep; once export starts we’ll ignore
         progressFill.style.background = '#ff3b30';
+        updateProgress(100, 'Cancelled');
+        isExporting = false;
+        cancelBtn.style.display = 'none';
         listContainer.querySelectorAll('button').forEach(b => b.disabled = false);
       }
     };
 
-    // Begin session
-    const meshCount = (() => { let c = 0; asset.object.traverse(o => { if (o.isMesh || o.isSkinnedMesh) c++; }); return c; })();
-    worker.postMessage({ type: 'begin', count: meshCount });
-    updateProgress(8, `Preparing ${meshCount} mesh${meshCount === 1 ? '' : 'es'}`);
+    let tmpRoot = null;
+    try {
+      // 1) Build a minimal, self-contained subtree (with bones) on the main thread
+      updateProgress(12, 'Cloning rig & meshes');
+      const { root, GLTFExporter, THREE } = await buildExportRoot(asset);
+      tmpRoot = root;
+
+      if (cancelRequested) throw new Error('cancelled');
+
+      // 2) Small settle to let UI paint
+      await idle(24);
+      updateProgress(28, 'Optimizing & sanitizing');
+
+      // 3) Export options to keep memory sane on mobile
+      const opts = {
+        binary: true,
+        onlyVisible: true,
+        truncateDrawRange: true,
+        embedImages: true,
+        // iOS is memory-tight; cap textures lower
+        maxTextureSize: isIOS() ? 2048 : 4096
+      };
+
+      if (cancelRequested) throw new Error('cancelled');
+
+      // 4) Kick exporter (this part is CPU-heavy and not cancellable)
+      updateProgress(62, 'Packaging GLB');
+      const exporter = new GLTFExporter();
+
+      // Promisify parse
+      const glb = await new Promise((resolve, reject) => {
+        try {
+          exporter.parse(
+            tmpRoot,
+            (glbBuffer) => resolve(glbBuffer),
+            (err) => reject(err instanceof Error ? err : new Error(String(err))),
+            opts
+          );
+        } catch (e) {
+          reject(e);
+        }
+      });
+
+      if (!glb) throw new Error('Export produced empty file');
+
+      updateProgress(92, 'Creating file');
+
+      const blob = new Blob([glb], { type: 'model/gltf-binary' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const base = assets.get(assetId).name.replace(/\.glb$/i, '');
+      a.download = `exported_${base}.glb`;
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      updateProgress(100, 'Download complete!');
+      setTimeout(() => showModal(false), 1200);
+    } catch (err) {
+      if (String(err.message || err) === 'cancelled') {
+        // UI already updated in cancel handler
+      } else {
+        console.error('Export error:', err);
+        updateProgress(100, 'Export failed');
+        progressFill.style.background = '#ff3b30';
+      }
+    } finally {
+      // Free the temporary clone ASAP
+      if (tmpRoot) {
+        try { disposeClone(tmpRoot); } catch {}
+        tmpRoot = null;
+      }
+      isExporting = false;
+      cancelBtn.style.display = 'none';
+      listContainer.querySelectorAll('button').forEach(b => b.disabled = false);
+    }
   }
 
   function bootstrap() {
@@ -356,7 +305,7 @@
     });
 
     window.Export = { show: () => showModal(true) };
-    window.Debug?.log('Export Module (textures + rig streaming) ready.');
+    window.Debug?.log('Export Module (main-thread, rig+textures) ready.');
   }
 
   if (window.App?.glVersion) bootstrap();
