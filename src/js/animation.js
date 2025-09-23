@@ -268,7 +268,8 @@
 
     // --- Bootstrap & Event Wiring ---
     function bootstrap() {
-        if (window.Animation) return;
+        // Avoid clashing with the browser's Web Animations API (window.Animation)
+        if (window.TFAnimation) return;
         
         injectUI();
 
@@ -311,10 +312,13 @@
         scrubForwardBtn.addEventListener('click', () => scrubTime(0.5));
         scrubBackwardBtn.addEventListener('click', () => scrubTime(-0.5));
 
-        // Expose public API for the menu button
-        window.Animation = {
+        // Public API (safe name)
+        window.TFAnimation = {
             show: () => showModal(true)
         };
+
+        // Optional compatibility alias (do NOT use window.Animation)
+        window.AnimationUI = window.TFAnimation;
         
         window.Debug?.log('Animation Module ready.');
     }
