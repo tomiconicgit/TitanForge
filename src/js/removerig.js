@@ -37,6 +37,7 @@
             #tf-removerig-preview {
                 width: 100%; height: 250px; border-radius: 8px;
                 background: #111418; border: 1px solid rgba(255,255,255,0.1);
+                overflow: hidden; /* Ensures canvas doesn't bleed out */
             }
             .tf-removerig-progress-area {
                 display: none; /* Hidden by default */
@@ -97,9 +98,9 @@
         previewScene.background = new THREE.Color('#111418');
         
         previewCamera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
-        previewCamera.position.set(0, 1.5, 3);
         
-        previewScene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5));
+        previewScene.add(new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.0));
+        previewScene.add(new THREE.AmbientLight(0x404040, 1.0));
         
         previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         previewRenderer.setPixelRatio(window.devicePixelRatio);
@@ -126,22 +127,36 @@
 
     function updatePreview() {
         if (!mainModel) return;
+        const { THREE } = window.Phonebook;
         
         // Clear previous object
         if (previewClone) {
             previewScene.remove(previewClone);
             previewScene.remove(previewSkeletonHelper);
+            // Properly dispose of old objects to prevent memory leaks
+            previewSkeletonHelper?.dispose();
         }
         
         previewClone = mainModel.object.clone();
         
-        const box = new window.Phonebook.THREE.Box3().setFromObject(previewClone);
-        const center = box.getCenter(new window.Phonebook.THREE.Vector3());
-        previewClone.position.sub(center); // Center the model
-        
+        // --- FIX: Center model and frame camera correctly ---
+        const box = new THREE.Box3().setFromObject(previewClone);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        previewClone.position.sub(center); // Center the model at the world origin
+
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = previewCamera.fov * (Math.PI / 180);
+        const cameraZ = Math.abs(maxDim / 1.5 / Math.tan(fov / 2));
+
+        previewCamera.position.set(0, 0, cameraZ);
+        previewCamera.lookAt(0, 0, 0);
+        // --- End Fix ---
+
         previewScene.add(previewClone);
         
-        previewSkeletonHelper = new window.Phonebook.THREE.SkeletonHelper(previewClone);
+        previewSkeletonHelper = new THREE.SkeletonHelper(previewClone);
         previewScene.add(previewSkeletonHelper);
         
         startPreviewAnimation();
@@ -183,17 +198,14 @@
         
         setTimeout(() => {
             updateProgress(33, 'Cloning meshes...');
+            
+            // FIX: Correctly bake the posed meshes into a new static model
+            mainModel.object.updateWorldMatrix(true, true); // Ensure world matrices are up to date
             mainModel.object.traverse(child => {
                 if (child.isMesh) {
-                    const newMesh = child.clone();
-                    // Meshes are cloned with world matrix, we need to reset to origin
-                    newMesh.position.set(0,0,0);
-                    newMesh.rotation.set(0,0,0);
-                    newMesh.scale.set(1,1,1);
-                    // To get correct position, we need to apply the world matrix of the original mesh
-                    child.getWorldPosition(newMesh.position);
-                    child.getWorldQuaternion(newMesh.quaternion);
-                    child.getWorldScale(newMesh.scale);
+                    const newMesh = new THREE.Mesh(child.geometry, child.material);
+                    newMesh.applyMatrix4(child.matrixWorld); // Apply the final world transformation
+                    newMesh.name = child.name;
                     riglessModel.add(newMesh);
                 }
             });
@@ -201,23 +213,24 @@
             setTimeout(() => {
                 updateProgress(66, 'Cleaning up old model...');
                 
-                // Keep a reference to the old model ID to remove it from tabs
-                const oldModelId = mainModel.id;
-                
                 // Dispose of the old model's resources and remove from scene
-                window.Cleaner.clean(mainModel);
+                // Use a non-animated cleaner call for instant removal
+                window.Viewer.remove(mainModel.object); // Remove from scene directly
                 
                 setTimeout(() => {
                     updateProgress(100, 'Process complete!');
                     
-                    // The 'cleaner' emits 'asset:cleaned', which will remove the old model from the Tabs UI.
-                    // Now, we load the new, rig-less model.
+                    // Create a new data object for the rig-less model
                     const newModelData = {
                         ...mainModel, // Copy stats from old model
                         id: `model-${Date.now()}`,
                         name: riglessModel.name,
                         object: riglessModel,
                     };
+
+                    // First, emit event to remove the old model from the Tabs UI
+                    App.emit('asset:cleaned', { id: mainModel.id });
+                    // Then, emit event to load the new model, which will add it and make it active
                     App.emit('asset:loaded', newModelData);
                     
                     completeBtn.style.display = 'block';
