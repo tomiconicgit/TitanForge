@@ -15,6 +15,23 @@
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     };
 
+    const sanitizeMaterials = (model) => {
+        const { THREE } = window.Phonebook;
+        model.traverse((child) => {
+            if (!child.isMesh || !child.material) return;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(mat => {
+                mat.transparent = false;
+                mat.opacity = 1;
+                mat.alphaTest = 0;
+                mat.depthWrite = true;
+                mat.depthTest = true;
+                mat.side = THREE.FrontSide;
+                mat.needsUpdate = true;
+            });
+        });
+    };
+
     // --- UI Injection ---
     function injectUI() {
         // A separate file input is needed for this module
@@ -70,6 +87,8 @@
                 const asset = gltf.scene;
                 let vertexCount = 0;
                 let triangleCount = 0;
+
+                sanitizeMaterials(asset);
 
                 asset.traverse(obj => {
                     if (obj.isMesh) {
