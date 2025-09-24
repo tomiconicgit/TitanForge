@@ -77,7 +77,6 @@
     }
 
     // --- 3D Scene Setup for Modal ---
-    // MODIFICATION: Added 'async' keyword to the function declaration.
     async function setupScene() {
         const { THREE } = window.Phonebook;
         const container = document.getElementById('tf-mesh-editor-canvas-container');
@@ -126,23 +125,30 @@
     }
 
     // --- Core Editor Logic ---
-    // MODIFICATION: Updated signature to accept assetId.
     async function open(mesh, assetId) {
-        if (!renderer) await setupScene(); // Lazy setup
+        if (!renderer) await setupScene();
 
         originalMesh = mesh;
-        activeAssetId = assetId; // MODIFICATION: Store the asset ID.
+        activeAssetId = assetId;
         
-        // IMPORTANT: Work on a clone of the geometry.
         const clonedGeometry = originalMesh.geometry.clone();
-        editMesh = new window.Phonebook.THREE.Mesh(clonedGeometry, originalMesh.material);
+
+        // --- MODIFICATION ---
+        // Create a new, standard material for the editor to ensure the mesh is always visible.
+        // The original material is NOT affected and will be kept when changes are saved.
+        const editorMaterial = new window.Phonebook.THREE.MeshStandardMaterial({
+            color: 0xdddddd, // A bright, neutral grey
+            side: window.Phonebook.THREE.DoubleSide // Makes editing easier by showing back-faces
+        });
+
+        editMesh = new window.Phonebook.THREE.Mesh(clonedGeometry, editorMaterial);
+        // --- END MODIFICATION ---
         
         scene.add(editMesh);
         
-        // Center view on the cloned mesh
         const box = new window.Phonebook.THREE.Box3().setFromObject(editMesh);
         const center = box.getCenter(new window.Phonebook.THREE.Vector3());
-        editMesh.position.sub(center); // Center mesh at origin for easier editing
+        editMesh.position.sub(center);
         controls.target.copy(center).sub(center);
         controls.update();
 
@@ -156,10 +162,10 @@
 
         modal.style.display = 'none';
 
-        // Cleanup to prevent memory leaks
         if (editMesh) {
             scene.remove(editMesh);
             editMesh.geometry.dispose();
+            // The editor-specific material is part of editMesh and will be garbage collected.
             editMesh = null;
         }
         if (selectionBox) {
@@ -169,22 +175,20 @@
             selectionBox = null;
         }
         originalMesh = null;
-        activeAssetId = null; // MODIFICATION: Clear the asset ID.
+        activeAssetId = null;
         eraseMode = false;
         document.getElementById('editor-erase-toggle').checked = false;
-        toggleEraseMode({ target: { checked: false } }); // Reset UI state
+        toggleEraseMode({ target: { checked: false } });
     }
 
     function saveChanges() {
         if (!originalMesh || !editMesh || !activeAssetId) return;
 
-        // Apply the edited geometry back to the original mesh
-        originalMesh.geometry.dispose(); // Dispose the old one
+        originalMesh.geometry.dispose();
         originalMesh.geometry = editMesh.geometry.clone();
         originalMesh.geometry.computeBoundingSphere();
         originalMesh.geometry.computeBoundingBox();
 
-        // MODIFICATION: Use the stored activeAssetId to emit the update event.
         App.emit('asset:updated', { id: activeAssetId });
         
         close();
@@ -193,10 +197,9 @@
     // --- Tool Implementation ---
     function toggleEraseMode(event) {
         eraseMode = event.target.checked;
-        controls.enabled = !eraseMode; // Disable orbit when erasing
+        controls.enabled = !eraseMode;
         document.getElementById('editor-box-tool-btn').style.display = eraseMode ? 'inline-block' : 'none';
         
-        // Hide box-specific buttons if erase mode is turned off
         if (!eraseMode && selectionBox) {
             scene.remove(selectionBox);
             transformControls.detach();
@@ -206,14 +209,13 @@
     }
 
     function showSelectionBox() {
-        if (selectionBox) return; // Only one box at a time
+        if (selectionBox) return;
         const { THREE } = window.Phonebook;
 
         const geo = new THREE.BoxGeometry(1, 1, 1);
         const mat = new THREE.MeshBasicMaterial({ color: 0x00c853, transparent: true, opacity: 0.3, wireframe: true });
         selectionBox = new THREE.Mesh(geo, mat);
 
-        // Position it near the mesh
         const meshBox = new THREE.Box3().setFromObject(editMesh);
         selectionBox.position.copy(meshBox.getCenter(new THREE.Vector3()));
         const size = meshBox.getSize(new THREE.Vector3());
@@ -237,8 +239,8 @@
 
         for (let i = 0; i < vertices.count; i++) {
             tempVertex.fromBufferAttribute(vertices, i);
-            tempVertex.applyMatrix4(editMesh.matrixWorld); // To world space
-            tempVertex.applyMatrix4(boxMatrixInverse); // To box's local space
+            tempVertex.applyMatrix4(editMesh.matrixWorld);
+            tempVertex.applyMatrix4(boxMatrixInverse);
 
             if (Math.abs(tempVertex.x) <= 0.5 && Math.abs(tempVertex.y) <= 0.5 && Math.abs(tempVertex.z) <= 0.5) {
                 if (geometry.index) {
@@ -255,7 +257,6 @@
             deleteFaces(Array.from(facesToDelete));
         }
 
-        // Clean up the box
         scene.remove(selectionBox);
         transformControls.detach();
         selectionBox = null;
