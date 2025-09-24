@@ -64,14 +64,14 @@
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
-        // --- MODIFICATION: New simplified UI for brush eraser ---
+        // --- MODIFICATION: Adjusted eraser slider range for finer control ---
         toolbar.innerHTML = `
             <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
             <div class="editor-tool-group">
                 <button id="lock-camera-btn" class="tf-editor-btn tf-editor-btn-secondary">Lock Camera</button>
                 <div class="slider-control">
                     <label for="eraser-size-slider">Size</label>
-                    <input type="range" id="eraser-size-slider" min="0.01" max="1" step="0.01" value="0.1" title="Eraser Size">
+                    <input type="range" id="eraser-size-slider" min="0.01" max="0.2" step="0.005" value="0.05" title="Eraser Size">
                 </div>
             </div>
             <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
@@ -97,7 +97,6 @@
 
         toolbar.style.display = 'flex';
         
-        // Add pointer listeners to the main viewer for erasing
         const viewerEl = window.Viewer.renderer.domElement;
         viewerEl.addEventListener('pointerdown', onPointerDown);
         viewerEl.addEventListener('pointermove', onPointerMove);
@@ -121,10 +120,8 @@
         
         toolbar.style.display = 'none';
         
-        // Ensure camera is unlocked on close
         if (isCameraLocked) toggleCameraLock();
 
-        // Remove pointer listeners
         const viewerEl = window.Viewer.renderer.domElement;
         viewerEl.removeEventListener('pointerdown', onPointerDown);
         viewerEl.removeEventListener('pointermove', onPointerMove);
@@ -149,6 +146,8 @@
     function onPointerDown(event) {
         if (isCameraLocked && event.isPrimary) {
             isErasing = true;
+            // Erase on first touch as well as on drag
+            eraseAtPoint(event);
         }
     }
 
@@ -164,49 +163,65 @@
         }
     }
 
+    // --- MODIFICATION: Rewritten brush erase logic for precision ---
     function eraseAtPoint(event) {
         if (!originalMesh) return;
         const { THREE } = window.Phonebook;
 
         const pointer = new THREE.Vector2();
-        pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-        pointer.y = - (event.clientY / (window.innerHeight * 0.5)) * 2 + 1; // Y is inverted and only top 50% vh
+        const rect = window.Viewer.renderer.domElement.getBoundingClientRect();
+        // Calculate pointer position relative to the canvas
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(pointer, window.Viewer.camera);
 
         const intersects = raycaster.intersectObject(originalMesh);
+
         if (intersects.length > 0) {
-            const intersectionPoint = intersects[0].point;
+            const intersectionPoint = intersects[0].point; // This is in world space
             const eraseRadius = parseFloat(eraserSizeSlider.value);
             
             const geometry = originalMesh.geometry;
-            const vertices = geometry.attributes.position;
             const facesToDelete = new Set();
             const tempVertex = new THREE.Vector3();
 
-            for (let i = 0; i < vertices.count; i++) {
-                tempVertex.fromBufferAttribute(vertices, i);
-                tempVertex.applyMatrix4(originalMesh.matrixWorld); // Check distance in world space
+            // Instead of checking every vertex, we check every face.
+            // This is more accurate for a brush-like effect.
+            if (geometry.index) {
+                for (let i = 0; i < geometry.index.count; i += 3) {
+                    const vA = geometry.index.getX(i);
+                    const vB = geometry.index.getX(i + 1);
+                    const vC = geometry.index.getX(i + 2);
 
-                if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
-                    // Find all faces connected to this vertex
-                    if (geometry.index) {
-                        for (let j = 0; j < geometry.index.count; j += 3) {
-                            if (geometry.index.getX(j) === i || geometry.index.getY(j) === i || geometry.index.getZ(j) === i) {
-                                facesToDelete.add(j / 3);
-                            }
-                        }
+                    // Check if any of the face's three vertices are within the brush radius
+                    tempVertex.fromBufferAttribute(geometry.attributes.position, vA).applyMatrix4(originalMesh.matrixWorld);
+                    if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
+                        facesToDelete.add(i / 3);
+                        continue; // No need to check other vertices of this face
+                    }
+
+                    tempVertex.fromBufferAttribute(geometry.attributes.position, vB).applyMatrix4(originalMesh.matrixWorld);
+                    if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
+                        facesToDelete.add(i / 3);
+                        continue;
+                    }
+
+                    tempVertex.fromBufferAttribute(geometry.attributes.position, vC).applyMatrix4(originalMesh.matrixWorld);
+                    if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
+                        facesToDelete.add(i / 3);
                     }
                 }
             }
+
             if (facesToDelete.size > 0) {
                 deleteFaces(Array.from(facesToDelete));
             }
         }
     }
     
-    // --- MODIFICATION: New robust deleteFaces function to preserve materials ---
+    // This function correctly rebuilds geometry while preserving materials/textures.
     function deleteFaces(faceIndices) {
         const { THREE } = window.Phonebook;
         const oldGeo = originalMesh.geometry;
@@ -230,7 +245,6 @@
         const newGeo = new THREE.BufferGeometry();
         const vertexMap = new Map();
         
-        // Create compacted attribute buffers (position, normal, uv, etc.)
         for (const attrName in oldGeo.attributes) {
             const oldAttr = oldGeo.attributes[attrName];
             const newAttrArray = new Float32Array(keptVertexIndices.size * oldAttr.itemSize);
@@ -248,6 +262,7 @@
         }
 
         const newIndicesArray = [];
+        const newGroups = [];
         oldGeo.groups.forEach(group => {
             const newGroup = { start: newIndicesArray.length, count: 0, materialIndex: group.materialIndex };
             for (let i = group.start; i < group.start + group.count; i += 3) {
@@ -259,15 +274,15 @@
                 }
             }
             if (newGroup.count > 0) {
-                newGeo.groups.push(newGroup);
+                newGroups.push(newGroup);
             }
         });
-
+        newGeo.groups = newGroups;
         newGeo.setIndex(newIndicesArray);
         
         originalMesh.geometry.dispose();
         originalMesh.geometry = newGeo;
-        window.Debug?.log(`Erased ${facesToDelete.size} faces and rebuilt geometry.`);
+        // No console log here to avoid flooding during drag
     }
 
 
