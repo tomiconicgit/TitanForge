@@ -5,40 +5,30 @@
 
     // --- Module State ---
     let originalMesh = null;
-    let originalGeometry = null;
+    let originalGeometry = null;  // Backup of the original geometry
+    let originalMaterial = null;  // Backup of the original material
     let activeAssetId = null;
     
     let toolbar, lockCameraButton, eraserSizeSlider;
     let isEditing = false;
     let isCameraLocked = false;
     let isErasing = false;
-
+    
     // --- UI Injection ---
     function injectUI() {
         const style = document.createElement('style');
         style.textContent = `
             #tf-mesh-editor-toolbar {
                 position: fixed;
-                bottom: 80px;
-                left: 16px;
-                right: 16px;
-                z-index: 20;
-                padding: 12px;
+                bottom: 80px; left: 16px; right: 16px;
+                z-index: 20; padding: 12px;
                 background: rgba(28, 38, 50, 0.9);
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
+                backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
-                display: none;
-                justify-content: space-between;
-                align-items: center;
-                gap: 10px;
+                display: none; justify-content: space-between; align-items: center; gap: 10px;
             }
-            .editor-tool-group {
-                display: flex;
-                gap: 15px;
-                align-items: center;
-            }
+            .editor-tool-group { display: flex; gap: 15px; align-items: center; }
             .tf-editor-btn {
                 padding: 8px 16px; font-size: 14px; font-weight: 600;
                 border-radius: 6px; border: none; cursor: pointer;
@@ -64,7 +54,6 @@
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
-        // --- MODIFICATION: Adjusted eraser slider range for finer control ---
         toolbar.innerHTML = `
             <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
             <div class="editor-tool-group">
@@ -87,35 +76,66 @@
     }
 
     // --- Core Editor Logic ---
-    async function open(mesh, assetId) {
+    function open(mesh, assetId) {
         if (isEditing) return;
+        const { THREE } = window.Phonebook;
         isEditing = true;
 
         originalMesh = mesh;
         activeAssetId = assetId;
+        
+        // --- MODIFICATION: The "Paint to Erase" Setup ---
+        // 1. Backup original geometry and material
         originalGeometry = originalMesh.geometry.clone();
+        originalMaterial = Array.isArray(originalMesh.material) 
+            ? originalMesh.material.map(m => m.clone()) 
+            : originalMesh.material.clone();
 
+        // 2. Create a temporary editing geometry
+        const editGeometry = originalGeometry.clone();
+
+        // 3. Add vertex colors to it, defaulting to white (the "keep" color)
+        if (!editGeometry.attributes.color) {
+            const colors = new Float32Array(editGeometry.attributes.position.count * 3);
+            colors.fill(1.0); // Fill with white
+            editGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        }
+
+        // 4. Create a temporary editing material that uses vertex colors
+        const editMaterial = Array.isArray(originalMaterial) 
+            ? originalMaterial.map(m => { m.vertexColors = true; return m; })
+            : (originalMaterial.vertexColors = true, originalMaterial);
+
+        // 5. Apply the temporary assets to the mesh for the editing session
+        originalMesh.geometry = editGeometry;
+        originalMesh.material = editMaterial;
+        
         toolbar.style.display = 'flex';
         
         const viewerEl = window.Viewer.renderer.domElement;
-        viewerEl.addEventListener('pointerdown', onPointerDown);
-        viewerEl.addEventListener('pointermove', onPointerMove);
-        viewerEl.addEventListener('pointerup', onPointerUp);
+        viewerEl.addEventListener('pointerdown', onPointerDown, { passive: false });
+        viewerEl.addEventListener('pointermove', onPointerMove, { passive: false });
+        viewerEl.addEventListener('pointerup', onPointerUp, { passive: false });
     }
 
     function close(shouldSaveChanges) {
         if (!isEditing) return;
 
         if (shouldSaveChanges) {
-            if(originalGeometry) originalGeometry.dispose();
+            // Finalize the deletion based on the red "paint mask"
+            const finalGeometry = createFinalGeometry();
+            originalMesh.geometry.dispose(); // Dispose of the temp geometry with colors
+            originalMesh.geometry = finalGeometry;
+            originalMesh.material = originalMaterial; // Restore original material
+
             App.emit('asset:updated', { id: activeAssetId });
             window.Debug?.log('Mesh edits applied.');
         } else {
-            if (originalMesh && originalGeometry) {
-                originalMesh.geometry.dispose();
-                originalMesh.geometry = originalGeometry;
-                window.Debug?.log('Mesh edits cancelled.');
-            }
+            // User cancelled, restore the backups
+            originalMesh.geometry.dispose();
+            originalMesh.geometry = originalGeometry;
+            originalMesh.material = originalMaterial;
+            window.Debug?.log('Mesh edits cancelled.');
         }
         
         toolbar.style.display = 'none';
@@ -129,6 +149,7 @@
         
         originalMesh = null;
         originalGeometry = null;
+        originalMaterial = null;
         activeAssetId = null;
         isEditing = false;
     }
@@ -145,15 +166,16 @@
     // --- Brush Erasing Implementation ---
     function onPointerDown(event) {
         if (isCameraLocked && event.isPrimary) {
+            event.preventDefault();
             isErasing = true;
-            // Erase on first touch as well as on drag
-            eraseAtPoint(event);
+            paintEraseMask(event);
         }
     }
 
     function onPointerMove(event) {
         if (isCameraLocked && isErasing && event.isPrimary) {
-            eraseAtPoint(event);
+            event.preventDefault();
+            paintEraseMask(event);
         }
     }
 
@@ -163,14 +185,13 @@
         }
     }
 
-    // --- MODIFICATION: Rewritten brush erase logic for precision ---
-    function eraseAtPoint(event) {
+    // --- MODIFICATION: This function now "paints" vertices red instead of deleting ---
+    function paintEraseMask(event) {
         if (!originalMesh) return;
         const { THREE } = window.Phonebook;
 
         const pointer = new THREE.Vector2();
         const rect = window.Viewer.renderer.domElement.getBoundingClientRect();
-        // Calculate pointer position relative to the canvas
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
@@ -178,61 +199,59 @@
         raycaster.setFromCamera(pointer, window.Viewer.camera);
 
         const intersects = raycaster.intersectObject(originalMesh);
+        if (intersects.length === 0) return;
 
-        if (intersects.length > 0) {
-            const intersectionPoint = intersects[0].point; // This is in world space
-            const eraseRadius = parseFloat(eraserSizeSlider.value);
-            
-            const geometry = originalMesh.geometry;
-            const facesToDelete = new Set();
-            const tempVertex = new THREE.Vector3();
+        const intersectionPoint = intersects[0].point;
+        const eraseRadius = parseFloat(eraserSizeSlider.value);
+        const geometry = originalMesh.geometry;
+        const positions = geometry.attributes.position;
+        const colors = geometry.attributes.color;
+        const tempVertex = new THREE.Vector3();
+        const redColor = new THREE.Color(0xff0000);
+        let colorsChanged = false;
 
-            // Instead of checking every vertex, we check every face.
-            // This is more accurate for a brush-like effect.
-            if (geometry.index) {
-                for (let i = 0; i < geometry.index.count; i += 3) {
-                    const vA = geometry.index.getX(i);
-                    const vB = geometry.index.getX(i + 1);
-                    const vC = geometry.index.getX(i + 2);
+        for (let i = 0; i < positions.count; i++) {
+            tempVertex.fromBufferAttribute(positions, i).applyMatrix4(originalMesh.matrixWorld);
 
-                    // Check if any of the face's three vertices are within the brush radius
-                    tempVertex.fromBufferAttribute(geometry.attributes.position, vA).applyMatrix4(originalMesh.matrixWorld);
-                    if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
-                        facesToDelete.add(i / 3);
-                        continue; // No need to check other vertices of this face
-                    }
-
-                    tempVertex.fromBufferAttribute(geometry.attributes.position, vB).applyMatrix4(originalMesh.matrixWorld);
-                    if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
-                        facesToDelete.add(i / 3);
-                        continue;
-                    }
-
-                    tempVertex.fromBufferAttribute(geometry.attributes.position, vC).applyMatrix4(originalMesh.matrixWorld);
-                    if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
-                        facesToDelete.add(i / 3);
-                    }
+            if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
+                // If the vertex color is not already red, change it
+                if (colors.getX(i) !== 1 || colors.getY(i) !== 0 || colors.getZ(i) !== 0) {
+                     colors.setXYZ(i, redColor.r, redColor.g, redColor.b);
+                     colorsChanged = true;
                 }
             }
-
-            if (facesToDelete.size > 0) {
-                deleteFaces(Array.from(facesToDelete));
-            }
+        }
+        
+        if (colorsChanged) {
+            colors.needsUpdate = true;
         }
     }
     
-    // This function correctly rebuilds geometry while preserving materials/textures.
-    function deleteFaces(faceIndices) {
+    // This function runs ONCE on save to build the final geometry
+    function createFinalGeometry() {
         const { THREE } = window.Phonebook;
-        const oldGeo = originalMesh.geometry;
-        const facesToDelete = new Set(faceIndices);
-
-        if (!oldGeo.index) {
-            console.warn("Erase tool only supports indexed geometry.");
-            return;
+        const editGeo = originalMesh.geometry;
+        const facesToDelete = new Set();
+        
+        // Find which faces to delete based on the red vertex color mask
+        const colors = editGeo.attributes.color;
+        for (let i = 0; i < editGeo.index.count; i += 3) {
+            const vA = editGeo.index.getX(i);
+            const vB = editGeo.index.getX(i + 1);
+            const vC = editGeo.index.getX(i + 2);
+            // If all 3 vertices of a face are red, mark it for deletion
+            if (colors.getX(vA) === 1 && colors.getX(vB) === 1 && colors.getX(vC) === 1) {
+                facesToDelete.add(i / 3);
+            }
+        }
+        
+        // If no faces are marked, just return the original geometry
+        if (facesToDelete.size === 0) {
+            return originalGeometry.clone();
         }
 
-        const oldIndices = oldGeo.index.array;
+        // --- The robust geometry reconstruction logic from before ---
+        const oldIndices = editGeo.index.array;
         const keptVertexIndices = new Set();
         for (let i = 0; i < oldIndices.length; i += 3) {
             if (!facesToDelete.has(i / 3)) {
@@ -245,17 +264,18 @@
         const newGeo = new THREE.BufferGeometry();
         const vertexMap = new Map();
         
-        for (const attrName in oldGeo.attributes) {
-            const oldAttr = oldGeo.attributes[attrName];
+        for (const attrName in originalGeometry.attributes) {
+            if (attrName === 'color') continue; // Don't copy the color attribute to the final geometry
+            const oldAttr = originalGeometry.attributes[attrName];
             const newAttrArray = new Float32Array(keptVertexIndices.size * oldAttr.itemSize);
-            let newIndex = 0;
-            keptVertexIndices.forEach(oldIndex => {
-                if (!vertexMap.has(oldIndex)) {
-                    vertexMap.set(oldIndex, newIndex);
-                    for (let i = 0; i < oldAttr.itemSize; i++) {
-                        newAttrArray[newIndex * oldAttr.itemSize + i] = oldAttr.array[oldIndex * oldAttr.itemSize + i];
+            let newVIndex = 0;
+            keptVertexIndices.forEach(oldVIndex => {
+                if (!vertexMap.has(oldVIndex)) {
+                    vertexMap.set(oldVIndex, newVIndex);
+                    for (let j = 0; j < oldAttr.itemSize; j++) {
+                        newAttrArray[newVIndex * oldAttr.itemSize + j] = oldAttr.array[oldVIndex * oldAttr.itemSize + j];
                     }
-                    newIndex++;
+                    newVIndex++;
                 }
             });
             newGeo.setAttribute(attrName, new THREE.BufferAttribute(newAttrArray, oldAttr.itemSize));
@@ -263,7 +283,7 @@
 
         const newIndicesArray = [];
         const newGroups = [];
-        oldGeo.groups.forEach(group => {
+        originalGeometry.groups.forEach(group => {
             const newGroup = { start: newIndicesArray.length, count: 0, materialIndex: group.materialIndex };
             for (let i = group.start; i < group.start + group.count; i += 3) {
                 if (!facesToDelete.has(i / 3)) {
@@ -280,9 +300,7 @@
         newGeo.groups = newGroups;
         newGeo.setIndex(newIndicesArray);
         
-        originalMesh.geometry.dispose();
-        originalMesh.geometry = newGeo;
-        // No console log here to avoid flooding during drag
+        return newGeo;
     }
 
 
