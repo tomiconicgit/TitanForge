@@ -8,9 +8,10 @@
     let originalGeometry = null;
     let activeAssetId = null;
     
-    let toolbar, transformControls, selectionBox, selectionBoxPivot;
-    let toolSettings, hSlider, vSlider, xSlider, ySlider, zSlider;
+    let toolbar, lockCameraButton, eraserSizeSlider;
     let isEditing = false;
+    let isCameraLocked = false;
+    let isErasing = false;
 
     // --- UI Injection ---
     function injectUI() {
@@ -22,34 +23,21 @@
                 left: 16px;
                 right: 16px;
                 z-index: 20;
-                padding: 10px;
+                padding: 12px;
                 background: rgba(28, 38, 50, 0.9);
                 backdrop-filter: blur(10px);
                 -webkit-backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
                 display: none;
-                flex-direction: column;
-                gap: 8px;
-            }
-            .editor-toolbar-row {
-                display: flex;
-                width: 100%;
                 justify-content: space-between;
                 align-items: center;
                 gap: 10px;
             }
-            #editor-tool-settings {
-                flex-grow: 1;
+            .editor-tool-group {
                 display: flex;
-                flex-direction: column;
+                gap: 15px;
                 align-items: center;
-                gap: 5px;
-            }
-            .slider-row {
-                display: flex;
-                justify-content: center;
-                gap: 10px;
             }
             .tf-editor-btn {
                 padding: 8px 16px; font-size: 14px; font-weight: 600;
@@ -57,16 +45,17 @@
             }
             .tf-editor-btn-primary { background: #00c853; color: #fff; }
             .tf-editor-btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
+            #lock-camera-btn.locked { background: #c62828; }
 
-            .slider-control { display: flex; align-items: center; gap: 5px; }
-            .slider-control label { color: #a0a7b0; font-size: 12px; font-weight: bold; width: 15px; text-align: center; }
+            .slider-control { display: flex; align-items: center; gap: 8px; }
+            .slider-control label { color: #a0a7b0; font-size: 14px; }
             #tf-mesh-editor-toolbar input[type=range] {
-                width: 70px; -webkit-appearance: none;
+                width: 120px; -webkit-appearance: none;
                 height: 4px; background: rgba(0,0,0,0.3);
                 border-radius: 2px; vertical-align: middle;
             }
             #tf-mesh-editor-toolbar input[type=range]::-webkit-slider-thumb {
-                -webkit-appearance: none; width: 14px; height: 14px;
+                -webkit-appearance: none; width: 16px; height: 16px;
                 background: #fff; border-radius: 50%;
                 cursor: pointer; border: 2px solid #2575fc;
             }
@@ -75,66 +64,29 @@
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
-        // --- MODIFICATION: Moved "Apply Box" button to the bottom row ---
+        // --- MODIFICATION: New simplified UI for brush eraser ---
         toolbar.innerHTML = `
-            <div class="editor-toolbar-row">
-                 <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Show Erase Box</button>
-                 <div id="editor-tool-settings" style="display:none;">
-                    <div class="slider-row">
-                        <div class="slider-control">
-                            <label for="editor-scale-h">H</label>
-                            <input type="range" id="editor-scale-h" min="0.01" max="5" step="0.01" value="1" title="Horizontal Size">
-                        </div>
-                        <div class="slider-control">
-                            <label for="editor-scale-v">V</label>
-                            <input type="range" id="editor-scale-v" min="0.01" max="5" step="0.01" value="1" title="Vertical Size">
-                        </div>
-                    </div>
-                    <div class="slider-row">
-                        <div class="slider-control">
-                            <label for="editor-pos-x">X</label>
-                            <input type="range" id="editor-pos-x" min="-5" max="5" step="0.01" value="0" title="Left/Right Position">
-                        </div>
-                        <div class="slider-control">
-                            <label for="editor-pos-y">Y</label>
-                            <input type="range" id="editor-pos-y" min="-5" max="5" step="0.01" value="0" title="Up/Down Position">
-                        </div>
-                        <div class="slider-control">
-                            <label for="editor-pos-z">Z</label>
-                            <input type="range" id="editor-pos-z" min="-5" max="5" step="0.01" value="0" title="Forward/Back Position">
-                        </div>
-                    </div>
-                 </div>
-            </div>
-            <div class="editor-toolbar-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
-                <div style="flex-grow: 1; text-align: center;">
-                    <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
+            <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
+            <div class="editor-tool-group">
+                <button id="lock-camera-btn" class="tf-editor-btn tf-editor-btn-secondary">Lock Camera</button>
+                <div class="slider-control">
+                    <label for="eraser-size-slider">Size</label>
+                    <input type="range" id="eraser-size-slider" min="0.01" max="1" step="0.01" value="0.1" title="Eraser Size">
                 </div>
-                <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
             </div>
+            <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
         `;
         document.getElementById('app').appendChild(toolbar);
 
-        toolSettings = toolbar.querySelector('#editor-tool-settings');
-        hSlider = toolbar.querySelector('#editor-scale-h');
-        vSlider = toolbar.querySelector('#editor-scale-v');
-        xSlider = toolbar.querySelector('#editor-pos-x');
-        ySlider = toolbar.querySelector('#editor-pos-y');
-        zSlider = toolbar.querySelector('#editor-pos-z');
-
-        hSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.scale.x = selectionBox.scale.z = parseFloat(e.target.value); } });
-        vSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.scale.y = parseFloat(e.target.value); } });
-        xSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.position.x = parseFloat(e.target.value); } });
-        ySlider.addEventListener('input', e => { if (selectionBox) { selectionBox.position.y = parseFloat(e.target.value); } });
-        zSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.position.z = parseFloat(e.target.value); } });
+        lockCameraButton = toolbar.querySelector('#lock-camera-btn');
+        eraserSizeSlider = toolbar.querySelector('#eraser-size-slider');
 
         toolbar.querySelector('#editor-save-btn').addEventListener('click', () => close(true));
         toolbar.querySelector('#editor-cancel-btn').addEventListener('click', () => close(false));
-        toolbar.querySelector('#editor-box-tool-btn').addEventListener('click', showSelectionBox);
-        toolbar.querySelector('#editor-apply-box-btn').addEventListener('click', applyBoxErase);
+        lockCameraButton.addEventListener('click', toggleCameraLock);
     }
 
+    // --- Core Editor Logic ---
     async function open(mesh, assetId) {
         if (isEditing) return;
         isEditing = true;
@@ -143,31 +95,13 @@
         activeAssetId = assetId;
         originalGeometry = originalMesh.geometry.clone();
 
-        if (window.Viewer && window.Viewer.controls) {
-            window.Viewer.controls.enabled = false;
-        }
-
-        if (!transformControls) {
-            const { TransformControls } = await import('three/addons/controls/TransformControls.js');
-            transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
-            
-            transformControls.addEventListener('objectChange', () => {
-                if (selectionBox) {
-                    hSlider.value = selectionBox.scale.x;
-                    vSlider.value = selectionBox.scale.y;
-                    xSlider.value = selectionBox.position.x;
-                    ySlider.value = selectionBox.position.y;
-                    zSlider.value = selectionBox.position.z;
-                }
-            });
-
-            transformControls.addEventListener('dragging-changed', (event) => {
-                if(window.Viewer.controls) window.Viewer.controls.enabled = !event.value;
-            });
-            window.Viewer.scene.add(transformControls);
-        }
-
         toolbar.style.display = 'flex';
+        
+        // Add pointer listeners to the main viewer for erasing
+        const viewerEl = window.Viewer.renderer.domElement;
+        viewerEl.addEventListener('pointerdown', onPointerDown);
+        viewerEl.addEventListener('pointermove', onPointerMove);
+        viewerEl.addEventListener('pointerup', onPointerUp);
     }
 
     function close(shouldSaveChanges) {
@@ -187,93 +121,92 @@
         
         toolbar.style.display = 'none';
         
-        if (selectionBoxPivot) {
-            transformControls.detach();
-            window.Viewer.scene.remove(selectionBoxPivot);
-            selectionBox.geometry.dispose();
-            selectionBox = null;
-            selectionBoxPivot = null;
-        }
-        
-        toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
-        toolSettings.style.display = 'none';
+        // Ensure camera is unlocked on close
+        if (isCameraLocked) toggleCameraLock();
 
-        if (window.Viewer && window.Viewer.controls) {
-            window.Viewer.controls.enabled = true;
-        }
+        // Remove pointer listeners
+        const viewerEl = window.Viewer.renderer.domElement;
+        viewerEl.removeEventListener('pointerdown', onPointerDown);
+        viewerEl.removeEventListener('pointermove', onPointerMove);
+        viewerEl.removeEventListener('pointerup', onPointerUp);
         
         originalMesh = null;
         originalGeometry = null;
         activeAssetId = null;
         isEditing = false;
     }
-    
-    function showSelectionBox() {
-        const { THREE } = window.Phonebook;
-        if (!selectionBoxPivot) {
-            selectionBoxPivot = new THREE.Group();
-            window.Viewer.scene.add(selectionBoxPivot);
-            
-            const geo = new THREE.BoxGeometry(1, 1, 1);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
-            selectionBox = new THREE.Mesh(geo, mat);
-            selectionBoxPivot.add(selectionBox);
-        }
-        
-        const meshBox = new THREE.Box3().setFromObject(originalMesh);
-        const center = meshBox.getCenter(new THREE.Vector3());
-        
-        transformControls.detach();
-        selectionBoxPivot.position.copy(center);
-        selectionBox.position.set(0, 0, 0);
-        selectionBox.scale.set(1, 1, 1);
-        transformControls.attach(selectionBoxPivot);
-        
-        toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
-        toolSettings.style.display = 'flex';
 
-        hSlider.value = selectionBox.scale.x;
-        vSlider.value = selectionBox.scale.y;
-        xSlider.value = selectionBox.position.x;
-        ySlider.value = selectionBox.position.y;
-        zSlider.value = selectionBox.position.z;
+    function toggleCameraLock() {
+        isCameraLocked = !isCameraLocked;
+        if (window.Viewer && window.Viewer.controls) {
+            window.Viewer.controls.enabled = !isCameraLocked;
+        }
+        lockCameraButton.classList.toggle('locked', isCameraLocked);
+        lockCameraButton.textContent = isCameraLocked ? 'Unlock Camera' : 'Lock Camera';
     }
 
-    function applyBoxErase() {
-        if (!selectionBox || !originalMesh) return;
-        
-        const geometry = originalMesh.geometry;
-        const facesToDelete = new Set();
-        const boxMatrixInverse = selectionBox.matrixWorld.clone().invert();
-        const tempVertex = new window.Phonebook.THREE.Vector3();
+    // --- Brush Erasing Implementation ---
+    function onPointerDown(event) {
+        if (isCameraLocked && event.isPrimary) {
+            isErasing = true;
+        }
+    }
 
-        const vertices = geometry.attributes.position;
-        for (let i = 0; i < vertices.count; i++) {
-            tempVertex.fromBufferAttribute(vertices, i);
-            tempVertex.applyMatrix4(originalMesh.matrixWorld);
-            tempVertex.applyMatrix4(boxMatrixInverse);
+    function onPointerMove(event) {
+        if (isCameraLocked && isErasing && event.isPrimary) {
+            eraseAtPoint(event);
+        }
+    }
 
-            if (Math.abs(tempVertex.x) <= 0.5 && Math.abs(tempVertex.y) <= 0.5 && Math.abs(tempVertex.z) <= 0.5) {
-                if (geometry.index) {
-                    for (let j = 0; j < geometry.index.count; j += 3) {
-                        if (geometry.index.getX(j) === i || geometry.index.getY(j) === i || geometry.index.getZ(j) === i) {
-                            facesToDelete.add(j / 3);
+    function onPointerUp(event) {
+        if (event.isPrimary) {
+            isErasing = false;
+        }
+    }
+
+    function eraseAtPoint(event) {
+        if (!originalMesh) return;
+        const { THREE } = window.Phonebook;
+
+        const pointer = new THREE.Vector2();
+        pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = - (event.clientY / (window.innerHeight * 0.5)) * 2 + 1; // Y is inverted and only top 50% vh
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(pointer, window.Viewer.camera);
+
+        const intersects = raycaster.intersectObject(originalMesh);
+        if (intersects.length > 0) {
+            const intersectionPoint = intersects[0].point;
+            const eraseRadius = parseFloat(eraserSizeSlider.value);
+            
+            const geometry = originalMesh.geometry;
+            const vertices = geometry.attributes.position;
+            const facesToDelete = new Set();
+            const tempVertex = new THREE.Vector3();
+
+            for (let i = 0; i < vertices.count; i++) {
+                tempVertex.fromBufferAttribute(vertices, i);
+                tempVertex.applyMatrix4(originalMesh.matrixWorld); // Check distance in world space
+
+                if (tempVertex.distanceTo(intersectionPoint) < eraseRadius) {
+                    // Find all faces connected to this vertex
+                    if (geometry.index) {
+                        for (let j = 0; j < geometry.index.count; j += 3) {
+                            if (geometry.index.getX(j) === i || geometry.index.getY(j) === i || geometry.index.getZ(j) === i) {
+                                facesToDelete.add(j / 3);
+                            }
                         }
                     }
                 }
             }
+            if (facesToDelete.size > 0) {
+                deleteFaces(Array.from(facesToDelete));
+            }
         }
-
-        if (facesToDelete.size > 0) {
-            deleteFaces(Array.from(facesToDelete));
-        }
-
-        toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
-        toolSettings.style.display = 'none';
-        transformControls.detach();
     }
-
-    // --- MODIFICATION: Complete rewrite of deleteFaces to preserve materials and compact geometry ---
+    
+    // --- MODIFICATION: New robust deleteFaces function to preserve materials ---
     function deleteFaces(faceIndices) {
         const { THREE } = window.Phonebook;
         const oldGeo = originalMesh.geometry;
@@ -284,65 +217,44 @@
             return;
         }
 
-        // --- Step 1: Identify which vertices to keep ---
         const oldIndices = oldGeo.index.array;
         const keptVertexIndices = new Set();
         for (let i = 0; i < oldIndices.length; i += 3) {
-            const faceIndex = i / 3;
-            if (!facesToDelete.has(faceIndex)) {
+            if (!facesToDelete.has(i / 3)) {
                 keptVertexIndices.add(oldIndices[i]);
-                keptVertexIndices.add(oldIndices[i+1]);
-                keptVertexIndices.add(oldIndices[i+2]);
+                keptVertexIndices.add(oldIndices[i + 1]);
+                keptVertexIndices.add(oldIndices[i + 2]);
             }
         }
 
-        // --- Step 2: Create new, compacted attribute buffers ---
         const newGeo = new THREE.BufferGeometry();
-        const oldPositions = oldGeo.attributes.position;
-        const newPositions = new THREE.Float32BufferAttribute(keptVertexIndices.size * 3, 3);
+        const vertexMap = new Map();
         
-        const vertexMap = new Map(); // Maps old vertex index to new vertex index
-        let newIndex = 0;
-        
-        keptVertexIndices.forEach(oldIndex => {
-            newPositions.setXYZ(newIndex, oldPositions.getX(oldIndex), oldPositions.getY(oldIndex), oldPositions.getZ(oldIndex));
-            vertexMap.set(oldIndex, newIndex);
-            newIndex++;
-        });
-        newGeo.setAttribute('position', newPositions);
-        
-        // Copy other attributes like normals and UVs
-        if (oldGeo.attributes.normal) {
-            const oldNormals = oldGeo.attributes.normal;
-            const newNormals = new THREE.Float32BufferAttribute(keptVertexIndices.size * 3, 3);
-            newIndex = 0;
+        // Create compacted attribute buffers (position, normal, uv, etc.)
+        for (const attrName in oldGeo.attributes) {
+            const oldAttr = oldGeo.attributes[attrName];
+            const newAttrArray = new Float32Array(keptVertexIndices.size * oldAttr.itemSize);
+            let newIndex = 0;
             keptVertexIndices.forEach(oldIndex => {
-                newNormals.setXYZ(newIndex, oldNormals.getX(oldIndex), oldNormals.getY(oldIndex), oldNormals.getZ(oldIndex));
-                newIndex++;
+                if (!vertexMap.has(oldIndex)) {
+                    vertexMap.set(oldIndex, newIndex);
+                    for (let i = 0; i < oldAttr.itemSize; i++) {
+                        newAttrArray[newIndex * oldAttr.itemSize + i] = oldAttr.array[oldIndex * oldAttr.itemSize + i];
+                    }
+                    newIndex++;
+                }
             });
-            newGeo.setAttribute('normal', newNormals);
-        }
-        if (oldGeo.attributes.uv) {
-            const oldUVs = oldGeo.attributes.uv;
-            const newUVs = new THREE.Float32BufferAttribute(keptVertexIndices.size * 2, 2);
-            newIndex = 0;
-            keptVertexIndices.forEach(oldIndex => {
-                newUVs.setXY(newIndex, oldUVs.getX(oldIndex), oldUVs.getY(oldIndex));
-                newIndex++;
-            });
-            newGeo.setAttribute('uv', newUVs);
+            newGeo.setAttribute(attrName, new THREE.BufferAttribute(newAttrArray, oldAttr.itemSize));
         }
 
-        // --- Step 3: Rebuild the index and material groups ---
         const newIndicesArray = [];
         oldGeo.groups.forEach(group => {
             const newGroup = { start: newIndicesArray.length, count: 0, materialIndex: group.materialIndex };
             for (let i = group.start; i < group.start + group.count; i += 3) {
-                const faceIndex = i / 3;
-                if (!facesToDelete.has(faceIndex)) {
+                if (!facesToDelete.has(i / 3)) {
                     newIndicesArray.push(vertexMap.get(oldIndices[i]));
-                    newIndicesArray.push(vertexMap.get(oldIndices[i+1]));
-                    newIndicesArray.push(vertexMap.get(oldIndices[i+2]));
+                    newIndicesArray.push(vertexMap.get(oldIndices[i + 1]));
+                    newIndicesArray.push(vertexMap.get(oldIndices[i + 2]));
                     newGroup.count += 3;
                 }
             }
@@ -353,11 +265,11 @@
 
         newGeo.setIndex(newIndicesArray);
         
-        // --- Step 4: Replace the old geometry ---
         originalMesh.geometry.dispose();
         originalMesh.geometry = newGeo;
         window.Debug?.log(`Erased ${facesToDelete.size} faces and rebuilt geometry.`);
     }
+
 
     function bootstrap() {
         if (window.MeshEditor) return;
