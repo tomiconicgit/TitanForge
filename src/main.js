@@ -72,7 +72,7 @@
           const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
           if (!gl) throw new Error('WebGL not available');
           this.glVersion = gl instanceof WebGL2RenderingContext ? 'webgl2' : 'webgl1';
-          Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} ­— ${this.glVersion}`);
+          Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} — ${this.glVersion}`);
         });
 
         this.addStage('wire:events', 'Wiring global events', async () => {
@@ -104,13 +104,10 @@
         await this.import('transform', './js/transform.js');
         await this.import('meshes', './js/meshes.js');
         await this.import('texture', './js/texture.js');
-        
-        // --- FIX APPLIED ---
-        // This ensures the mesh editor module is always loaded at startup.
         await this.import('mesheditor', './js/mesh-editor.js');
 
 
-        Task.done('director', `OK ­— ${this.glVersion || 'webgl?'}`);
+        Task.done('director', `OK — ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
 
       } catch (e) {
