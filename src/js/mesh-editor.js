@@ -1,31 +1,39 @@
-// src/js/mesh-editor.js - Modal-based mesh geometry editor
+// src/js/mesh-editor.js - In-viewer mesh geometry editor
 
 (function() {
     'use strict';
 
     // --- Module State ---
-    let originalMesh = null; // The mesh from the main scene
-    let editMesh = null;     // A clone of the mesh for editing
-    let activeAssetId = null; // The ID of the parent asset
-    let modal, renderer, scene, camera, controls, transformControls, selectionBox;
-    let eraseMode = false;
-    let rafId = null;
+    let originalMesh = null;        // The mesh being edited
+    let originalGeometry = null;    // A backup of the geometry for 'cancel'
+    let activeAssetId = null;       // The ID of the parent asset
+    
+    let toolbar, transformControls, selectionBox;
+    let isEditing = false;
 
-    // --- UI & Scene Injection ---
+    // --- UI Injection ---
     function injectUI() {
         const style = document.createElement('style');
         style.textContent = `
-            #tf-mesh-editor-modal {
-                position: fixed; inset: 0; z-index: 2000;
-                background: rgba(13, 16, 20, 0.9);
-                display: none; flex-direction: column;
-            }
-            #tf-mesh-editor-canvas-container {
-                flex-grow: 1; position: relative;
-            }
+            /* This is now a floating toolbar, not a full-screen modal */
             #tf-mesh-editor-toolbar {
-                flex-shrink: 0; padding: 10px; background: #1C2026;
-                display: flex; justify-content: space-between; align-items: center; gap: 10px;
+                position: fixed;
+                bottom: 80px; /* Position it above the lower nav panels */
+                left: 16px;
+                right: 16px;
+                z-index: 20; /* Above nav panels but below modals */
+                
+                padding: 10px;
+                background: rgba(28, 38, 50, 0.9);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                
+                display: none; /* Hidden by default */
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
             }
             #tf-mesh-editor-toolbar .tool-group { display: flex; gap: 10px; align-items: center; }
             .tf-editor-btn {
@@ -34,213 +42,151 @@
             }
             .tf-editor-btn-primary { background: #00c853; color: #fff; }
             .tf-editor-btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
-            .tf-editor-btn-danger { background: #c62828; color: #fff; }
 
             .tf-toggle-row { display: flex; align-items: center; gap: 8px; }
             .tf-toggle-row label { color: #e6eef6; font-size: 15px; }
         `;
         document.head.appendChild(style);
 
-        modal = document.createElement('div');
-        modal.id = 'tf-mesh-editor-modal';
-        modal.innerHTML = `
-            <div id="tf-mesh-editor-canvas-container"></div>
-            <div id="tf-mesh-editor-toolbar">
-                <div class="tool-group">
-                    <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
+        toolbar = document.createElement('div');
+        toolbar.id = 'tf-mesh-editor-toolbar';
+        toolbar.innerHTML = `
+            <div class="tool-group">
+                <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
+            </div>
+            <div class="tool-group">
+                <div class="tf-toggle-row">
+                    <label>Erase Mode</label>
                 </div>
-                <div class="tool-group">
-                    <div class="tf-toggle-row">
-                        <label for="editor-erase-toggle">Erase Mode</label>
-                        <label class="tf-switch">
-                            <input type="checkbox" id="editor-erase-toggle">
-                            <span class="tf-slider"></span>
-                        </label>
-                    </div>
-                    <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary" style="display:none;">Box Erase</button>
-                    <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
-                </div>
-                <div class="tool-group">
-                    <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
-                </div>
+                <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Box Erase</button>
+                <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
+            </div>
+            <div class="tool-group">
+                <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
             </div>
         `;
-        document.body.appendChild(modal);
+        document.getElementById('app').appendChild(toolbar);
 
-        document.getElementById('editor-save-btn').addEventListener('click', saveChanges);
-        document.getElementById('editor-cancel-btn').addEventListener('click', close);
-        document.getElementById('editor-erase-toggle').addEventListener('change', toggleEraseMode);
-        document.getElementById('editor-box-tool-btn').addEventListener('click', showSelectionBox);
-        document.getElementById('editor-apply-box-btn').addEventListener('click', applyBoxErase);
-    }
-
-    // --- 3D Scene Setup for Modal ---
-    async function setupScene() {
-        const { THREE } = window.Phonebook;
-        const container = document.getElementById('tf-mesh-editor-canvas-container');
-
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x22272e);
-
-        camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
-        camera.position.set(0, 1, 3);
-
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        container.appendChild(renderer.domElement);
-
-        const ambient = new THREE.AmbientLight(0xffffff, 0.7);
-        scene.add(ambient);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-        dirLight.position.set(2, 5, 3);
-        scene.add(dirLight);
-
-        // Lazily import controls that are not in the main Phonebook
-        const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-        const { TransformControls } = await import('three/addons/controls/TransformControls.js');
-        
-        controls = new OrbitControls(camera, renderer.domElement);
-        transformControls = new TransformControls(camera, renderer.domElement);
-        transformControls.addEventListener('dragging-changed', (event) => {
-            controls.enabled = !event.value;
-        });
-        scene.add(transformControls);
-        
-        scene.add(new THREE.GridHelper(10, 10));
-    }
-
-    function animate() {
-        rafId = requestAnimationFrame(animate);
-        if (controls) controls.update();
-        if (renderer) renderer.render(scene, camera);
+        // --- Event Listeners ---
+        toolbar.querySelector('#editor-save-btn').addEventListener('click', () => close(true));
+        toolbar.querySelector('#editor-cancel-btn').addEventListener('click', () => close(false));
+        toolbar.querySelector('#editor-box-tool-btn').addEventListener('click', showSelectionBox);
+        toolbar.querySelector('#editor-apply-box-btn').addEventListener('click', applyBoxErase);
     }
 
     // --- Core Editor Logic ---
     async function open(mesh, assetId) {
-        if (!renderer) await setupScene();
+        if (isEditing) return; // Prevent opening multiple edit sessions
+        isEditing = true;
 
         originalMesh = mesh;
         activeAssetId = assetId;
-        
-        const clonedGeometry = originalMesh.geometry.clone();
-        
-        // Reverted: Use the original material as requested. The camera positioning is the true fix.
-        editMesh = new window.Phonebook.THREE.Mesh(clonedGeometry, originalMesh.material);
-        
-        scene.add(editMesh);
-        
-        // --- MODIFICATION: Robust camera and controls positioning ---
-        const box = new window.Phonebook.THREE.Box3().setFromObject(editMesh);
-        const center = box.getCenter(new window.Phonebook.THREE.Vector3());
-        const size = box.getSize(new window.Phonebook.THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const fov = camera.fov * (Math.PI / 180);
-        
-        // Calculate the distance the camera should be to fit the object in the view.
-        let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-        cameraZ *= 1.5; // Add some padding
-        
-        // Position the mesh at the world origin for consistent editing
-        editMesh.position.sub(center);
 
-        // Point the camera at the mesh's new origin
-        camera.position.set(0, 0, Math.max(cameraZ, 1.5)); // Ensure camera is not too close
-        camera.lookAt(0, 0, 0);
-        
-        // Update orbit controls to pivot around the mesh's new origin
-        controls.target.set(0, 0, 0);
-        controls.update();
-        // --- END MODIFICATION ---
+        // CRITICAL: Create a backup of the geometry for the cancel/undo functionality.
+        originalGeometry = originalMesh.geometry.clone();
 
-        modal.style.display = 'flex';
-        animate();
+        // Disable main viewer controls so we can use the editor tools
+        if (window.Viewer && window.Viewer.controls) {
+            window.Viewer.controls.enabled = false;
+        }
+
+        // Setup TransformControls for the selection box
+        if (!transformControls) {
+            const { TransformControls } = await import('three/addons/controls/TransformControls.js');
+            transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
+            transformControls.addEventListener('dragging-changed', (event) => {
+                // While dragging the box, keep main controls disabled
+                if(window.Viewer.controls) window.Viewer.controls.enabled = !event.value;
+            });
+            window.Viewer.scene.add(transformControls);
+        }
+
+        toolbar.style.display = 'flex';
     }
 
-    function close() {
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = null;
+    function close(shouldSaveChanges) {
+        if (!isEditing) return;
 
-        modal.style.display = 'none';
+        if (shouldSaveChanges) {
+            // The geometry on originalMesh is already the edited version.
+            // We just need to dispose of the backup.
+            if(originalGeometry) originalGeometry.dispose();
+            
+            // Notify other modules that the mesh has changed
+            App.emit('asset:updated', { id: activeAssetId });
+            window.Debug?.log('Mesh edits applied.');
 
-        if (editMesh) {
-            scene.remove(editMesh);
-            editMesh.geometry.dispose();
-            editMesh = null;
+        } else {
+            // User cancelled. Restore the backup geometry.
+            if (originalMesh && originalGeometry) {
+                originalMesh.geometry.dispose(); // Dispose of the edited, unsaved geometry
+                originalMesh.geometry = originalGeometry; // Restore the backup
+                window.Debug?.log('Mesh edits cancelled.');
+            }
         }
+        
+        // --- Universal Cleanup ---
+        toolbar.style.display = 'none';
+        
+        // Clean up selection box and transform controls
         if (selectionBox) {
-            scene.remove(selectionBox);
             transformControls.detach();
+            window.Viewer.scene.remove(selectionBox);
             selectionBox.geometry.dispose();
             selectionBox = null;
         }
-        originalMesh = null;
-        activeAssetId = null;
-        eraseMode = false;
-        document.getElementById('editor-erase-toggle').checked = false;
-        toggleEraseMode({ target: { checked: false } });
-    }
+        if(transformControls) transformControls.detach();
+        toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
 
-    function saveChanges() {
-        if (!originalMesh || !editMesh || !activeAssetId) return;
-
-        originalMesh.geometry.dispose();
-        originalMesh.geometry = editMesh.geometry.clone();
-        originalMesh.geometry.computeBoundingSphere();
-        originalMesh.geometry.computeBoundingBox();
-
-        App.emit('asset:updated', { id: activeAssetId });
+        // Re-enable main viewer controls
+        if (window.Viewer && window.Viewer.controls) {
+            window.Viewer.controls.enabled = true;
+        }
         
-        close();
+        // Reset state
+        originalMesh = null;
+        originalGeometry = null;
+        activeAssetId = null;
+        isEditing = false;
     }
     
     // --- Tool Implementation ---
-    function toggleEraseMode(event) {
-        eraseMode = event.target.checked;
-        controls.enabled = !eraseMode;
-        document.getElementById('editor-box-tool-btn').style.display = eraseMode ? 'inline-block' : 'none';
-        
-        if (!eraseMode && selectionBox) {
-            scene.remove(selectionBox);
-            transformControls.detach();
-            selectionBox = null;
-            document.getElementById('editor-apply-box-btn').style.display = 'none';
-        }
-    }
-
     function showSelectionBox() {
-        if (selectionBox) return;
+        if (selectionBox) { // If box already exists, just re-attach controls
+             transformControls.attach(selectionBox);
+             return;
+        };
         const { THREE } = window.Phonebook;
 
         const geo = new THREE.BoxGeometry(1, 1, 1);
         const mat = new THREE.MeshBasicMaterial({ color: 0x00c853, transparent: true, opacity: 0.3, wireframe: true });
         selectionBox = new THREE.Mesh(geo, mat);
 
-        const meshBox = new THREE.Box3().setFromObject(editMesh);
+        const meshBox = new THREE.Box3().setFromObject(originalMesh);
         selectionBox.position.copy(meshBox.getCenter(new THREE.Vector3()));
         const size = meshBox.getSize(new THREE.Vector3());
         selectionBox.scale.set(size.x * 0.5, size.y * 0.5, size.z * 0.5);
 
-        scene.add(selectionBox);
+        window.Viewer.scene.add(selectionBox);
         transformControls.attach(selectionBox);
-        document.getElementById('editor-apply-box-btn').style.display = 'inline-block';
+        toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
     }
 
     function applyBoxErase() {
-        if (!selectionBox || !editMesh) return;
-        const { THREE } = window.Phonebook;
-
-        const geometry = editMesh.geometry;
+        if (!selectionBox || !originalMesh) return;
+        
+        // The mesh being edited is now originalMesh directly
+        const geometry = originalMesh.geometry;
         const vertices = geometry.attributes.position;
         
         const facesToDelete = new Set();
         const boxMatrixInverse = selectionBox.matrixWorld.clone().invert();
-        const tempVertex = new THREE.Vector3();
+        const tempVertex = new window.Phonebook.THREE.Vector3();
 
         for (let i = 0; i < vertices.count; i++) {
             tempVertex.fromBufferAttribute(vertices, i);
-            tempVertex.applyMatrix4(editMesh.matrixWorld);
-            tempVertex.applyMatrix4(boxMatrixInverse);
+            tempVertex.applyMatrix4(originalMesh.matrixWorld); // From mesh's local to world space
+            tempVertex.applyMatrix4(boxMatrixInverse); // From world space to box's local space
 
             if (Math.abs(tempVertex.x) <= 0.5 && Math.abs(tempVertex.y) <= 0.5 && Math.abs(tempVertex.z) <= 0.5) {
                 if (geometry.index) {
@@ -257,15 +203,12 @@
             deleteFaces(Array.from(facesToDelete));
         }
 
-        scene.remove(selectionBox);
+        toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
         transformControls.detach();
-        selectionBox = null;
-        document.getElementById('editor-apply-box-btn').style.display = 'none';
     }
 
     function deleteFaces(faceIndices) {
-        const { THREE } = window.Phonebook;
-        const oldGeo = editMesh.geometry;
+        const oldGeo = originalMesh.geometry;
         if (!oldGeo.index) {
             console.warn("Delete faces is only supported for indexed geometry.");
             return;
@@ -281,24 +224,25 @@
             }
         }
         
-        const newGeo = new THREE.BufferGeometry();
+        const newGeo = new window.Phonebook.THREE.BufferGeometry();
         newGeo.setAttribute('position', oldGeo.attributes.position);
         if(oldGeo.attributes.normal) newGeo.setAttribute('normal', oldGeo.attributes.normal);
         if(oldGeo.attributes.uv) newGeo.setAttribute('uv', oldGeo.attributes.uv);
         newGeo.setIndex(newIndices);
         
-        editMesh.geometry.dispose();
-        editMesh.geometry = newGeo;
+        originalMesh.geometry.dispose(); // Dispose of the old geometry with all faces
+        originalMesh.geometry = newGeo; // Assign the new, smaller geometry
         window.Debug?.log(`Erased ${facesToDelete.size} faces.`);
     }
 
+    // --- Public API ---
     function bootstrap() {
         if (window.MeshEditor) return;
         injectUI();
         window.MeshEditor = {
             open,
         };
-        window.Debug?.log('Mesh Editor module ready.');
+        window.Debug?.log('In-Viewer Mesh Editor module ready.');
     }
 
     if (window.App?.glVersion) bootstrap();
