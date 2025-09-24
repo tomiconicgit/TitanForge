@@ -309,7 +309,6 @@
     function attachAssetToBone(boneName) {
         if (!activeAsset || !mainModel) return;
 
-        const { THREE } = window.Phonebook;
         const obj = activeAsset.object;
 
         if (boneName === 'detach') {
@@ -322,22 +321,13 @@
         const targetBone = mainModel.object.getObjectByName(boneName);
         if (!targetBone) return;
 
-        const worldScaleBefore = new THREE.Vector3();
-        obj.getWorldScale(worldScaleBefore);
-
+        // --- MODIFICATION START ---
+        // The previous logic incorrectly reset the object's local transform after attaching.
+        // The `.attach()` method correctly preserves the object's world transform by calculating
+        // the new local transform required after re-parenting. This is all we need.
         targetBone.attach(obj);
-
-        const boneWorldScale = new THREE.Vector3();
-        targetBone.getWorldScale(boneWorldScale);
-
-        obj.position.set(0, 0, 0);
-        obj.rotation.set(0, 0, 0);
-        obj.scale.set(
-            worldScaleBefore.x / (boneWorldScale.x || 1),
-            worldScaleBefore.y / (boneWorldScale.y || 1),
-            worldScaleBefore.z / (boneWorldScale.z || 1)
-        );
-        obj.updateMatrixWorld(true);
+        obj.updateMatrixWorld(true); // It's good practice to update matrices after parenting.
+        // --- MODIFICATION END ---
 
         boneAttachBtn.textContent = `Attached to: ${boneName}`;
         syncSlidersToAsset();
