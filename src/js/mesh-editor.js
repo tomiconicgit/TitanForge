@@ -4,8 +4,8 @@
 
   if (window.MeshEditor) return;
 
-  // This 'scope' object will hold all module-level variables,
-  // populated safely inside the bootstrap function to avoid race conditions.
+  // This 'scope' object will hold all module-level variables.
+  // We populate it safely inside the bootstrap function to avoid race conditions.
   const scope = {
     THREE: null,
     state: {
@@ -25,10 +25,13 @@
     const style = document.createElement('style');
     style.textContent = `
       #tf-mesh-editor-panel {
+        /* --- MODIFICATION: Repositioned panel to the bottom half --- */
         position: fixed;
-        bottom: 383px;
+        top: calc(50vh + 70px); /* Changed from 'bottom: 383px' */
         left: 16px;
         z-index: 26;
+        /* --- End Modification --- */
+
         width: 280px;
         background: rgba(28, 32, 38, 0.9);
         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -147,7 +150,7 @@
     updateSlider('posZ', position.z);
     updateSlider('sizeW', scale.x);
     updateSlider('sizeH', scale.y);
-    updateSlider('sizeD', scale.d);
+    updateSlider('sizeD', scale.z); // Corrected from scale.d
   }
 
   function updateSlider(controlName, value) {
@@ -276,8 +279,9 @@
   async function onErase() {
     const {targetMesh, boxes, activeAsset} = scope.state;
     if (!targetMesh || boxes.length === 0) return;
-    const progEl = document.getElementById('tf-me-progress');
+    const progEl = document.getElementById('tf-me-progress'); // This element is created in your original code
     const showProgress = (show, pct, label) => {
+        if (!progEl) return;
         progEl.classList.toggle('show', !!show);
         if (show && typeof pct === 'number') { progEl.querySelector('.tf-me-fill').style.width = `${pct}%`; }
         if (label) { progEl.querySelector('.tf-me-status').textContent = label; }
@@ -356,7 +360,9 @@
       console.error("MeshEditor could not initialize: THREE.js not found.");
       return;
     }
+    // Safely populate the scope with dependencies now that the app is ready.
     scope.THREE = window.Phonebook.THREE;
+
     injectUI();
 
     // Event Listeners
