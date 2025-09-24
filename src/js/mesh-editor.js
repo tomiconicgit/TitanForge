@@ -36,7 +36,6 @@
             .tf-editor-btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
             .tf-editor-btn-danger { background: #c62828; color: #fff; }
 
-            /* Re-using toggle switch styles */
             .tf-toggle-row { display: flex; align-items: center; gap: 8px; }
             .tf-toggle-row label { color: #e6eef6; font-size: 15px; }
         `;
@@ -68,7 +67,6 @@
         `;
         document.body.appendChild(modal);
 
-        // --- Event Listeners ---
         document.getElementById('editor-save-btn').addEventListener('click', saveChanges);
         document.getElementById('editor-cancel-btn').addEventListener('click', close);
         document.getElementById('editor-erase-toggle').addEventListener('change', toggleEraseMode);
@@ -81,47 +79,41 @@
         const { THREE } = window.Phonebook;
         const container = document.getElementById('tf-mesh-editor-canvas-container');
 
-        // Scene
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x22272e);
 
-        // Camera
-        camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
+        camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
         camera.position.set(0, 1, 3);
 
-        // Renderer
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         container.appendChild(renderer.domElement);
 
-        // Lighting
         const ambient = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambient);
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
         dirLight.position.set(2, 5, 3);
         scene.add(dirLight);
 
-        // Controls
+        // Lazily import controls that are not in the main Phonebook
         const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 0, 0);
-
         const { TransformControls } = await import('three/addons/controls/TransformControls.js');
+        
+        controls = new OrbitControls(camera, renderer.domElement);
         transformControls = new TransformControls(camera, renderer.domElement);
         transformControls.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
         });
         scene.add(transformControls);
         
-        // Grid
         scene.add(new THREE.GridHelper(10, 10));
     }
 
     function animate() {
         rafId = requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
+        if (controls) controls.update();
+        if (renderer) renderer.render(scene, camera);
     }
 
     // --- Core Editor Logic ---
@@ -132,25 +124,34 @@
         activeAssetId = assetId;
         
         const clonedGeometry = originalMesh.geometry.clone();
-
-        // --- MODIFICATION ---
-        // Create a new, standard material for the editor to ensure the mesh is always visible.
-        // The original material is NOT affected and will be kept when changes are saved.
-        const editorMaterial = new window.Phonebook.THREE.MeshStandardMaterial({
-            color: 0xdddddd, // A bright, neutral grey
-            side: window.Phonebook.THREE.DoubleSide // Makes editing easier by showing back-faces
-        });
-
-        editMesh = new window.Phonebook.THREE.Mesh(clonedGeometry, editorMaterial);
-        // --- END MODIFICATION ---
+        
+        // Reverted: Use the original material as requested. The camera positioning is the true fix.
+        editMesh = new window.Phonebook.THREE.Mesh(clonedGeometry, originalMesh.material);
         
         scene.add(editMesh);
         
+        // --- MODIFICATION: Robust camera and controls positioning ---
         const box = new window.Phonebook.THREE.Box3().setFromObject(editMesh);
         const center = box.getCenter(new window.Phonebook.THREE.Vector3());
+        const size = box.getSize(new window.Phonebook.THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = camera.fov * (Math.PI / 180);
+        
+        // Calculate the distance the camera should be to fit the object in the view.
+        let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+        cameraZ *= 1.5; // Add some padding
+        
+        // Position the mesh at the world origin for consistent editing
         editMesh.position.sub(center);
-        controls.target.copy(center).sub(center);
+
+        // Point the camera at the mesh's new origin
+        camera.position.set(0, 0, Math.max(cameraZ, 1.5)); // Ensure camera is not too close
+        camera.lookAt(0, 0, 0);
+        
+        // Update orbit controls to pivot around the mesh's new origin
+        controls.target.set(0, 0, 0);
         controls.update();
+        // --- END MODIFICATION ---
 
         modal.style.display = 'flex';
         animate();
@@ -165,7 +166,6 @@
         if (editMesh) {
             scene.remove(editMesh);
             editMesh.geometry.dispose();
-            // The editor-specific material is part of editMesh and will be garbage collected.
             editMesh = null;
         }
         if (selectionBox) {
@@ -292,16 +292,12 @@
         window.Debug?.log(`Erased ${facesToDelete.size} faces.`);
     }
 
-    // --- Public API ---
     function bootstrap() {
         if (window.MeshEditor) return;
-
         injectUI();
-
         window.MeshEditor = {
             open,
         };
-        
         window.Debug?.log('Mesh Editor module ready.');
     }
 
