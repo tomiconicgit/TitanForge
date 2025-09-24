@@ -33,11 +33,12 @@
     raycaster: null
   };
 
-  const { THREE } = window.Phonebook || {};
-  if (!THREE) {
-    console.error('[MeshEditor] THREE not found (Phonebook missing).');
-    return;
-  }
+  // --- MODIFICATION START ---
+  // The redundant check for THREE.js has been removed from here.
+  // The main.js file already guarantees that window.Phonebook and THREE are available
+  // before this script is ever loaded.
+  const { THREE } = window.Phonebook;
+  // --- MODIFICATION END ---
 
   // ----- UI -----
   let panel, lockCheckbox, eraseBtn, clearBtn, closeBtn, counterEl, hintEl;
