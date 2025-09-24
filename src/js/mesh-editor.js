@@ -5,19 +5,17 @@
   if (window.MeshEditor) return;
 
   // This 'scope' object will hold all module-level variables.
-  // We populate it safely inside the bootstrap function to avoid race conditions.
   const scope = {
     THREE: null,
     state: {
       activeAsset: null,
       targetMesh: null,
       isOpen: false,
-      previewBox: null,     // The live box controlled by sliders
-      boxes: [],            // The array of committed THREE.Box3 for erasure
-      selectionGroup: null, // Holds visuals for both preview and committed boxes
+      previewBox: null,
+      boxes: [],
+      selectionGroup: null,
     },
     panel: null,
-    // Add other UI elements to scope as needed
   };
 
   // --- UI Injection ---
@@ -25,33 +23,40 @@
     const style = document.createElement('style');
     style.textContent = `
       #tf-mesh-editor-panel {
-        /* --- MODIFICATION: Repositioned panel to the bottom half --- */
+        /* --- MODIFICATION: Sized to fill the bottom panel area --- */
         position: fixed;
-        top: calc(50vh + 70px); /* Changed from 'bottom: 383px' */
-        left: 16px;
-        z-index: 26;
-        /* --- End Modification --- */
-
-        width: 280px;
-        background: rgba(28, 32, 38, 0.9);
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        top: calc(50vh + 54px); /* Position below nav bar */
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 25; /* Lowered to be consistent with other panels */
+        background: #0D1014;
+        padding: 16px;
+        box-sizing: border-box;
+        overflow-y: auto; /* Allow scrolling */
         display: none;
+        /* --- End Modification --- */
+      }
+      #tf-mesh-editor-panel.show { display: block; }
+      
+      /* Added a content wrapper to center the controls */
+      .tf-me-content-wrapper {
+        width: 100%;
+        max-width: 600px; /* Consistent with transform panel */
+        margin: 0 auto;
+        display: flex;
         flex-direction: column;
         gap: 12px;
-        padding: 12px;
         color: #e6eef6;
       }
-      #tf-mesh-editor-panel.show { display: flex; }
+
       .tf-me-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
       .tf-me-pill { font-size: 12px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.08); color: #a0a7b0; }
       .tf-me-sliders { display: flex; flex-direction: column; gap: 8px; }
-      .tf-me-slider-group { display: grid; grid-template-columns: 20px 1fr 50px; align-items: center; gap: 8px; }
+      .tf-me-slider-group { display: grid; grid-template-columns: 20px 1fr 55px; align-items: center; gap: 8px; }
       .tf-me-slider-group label { font-size: 13px; color: #a0a7b0; }
       .tf-me-slider-group input[type=range] { width: 100%; margin: 0; }
-      .tf-me-slider-group input[type=number] { width: 100%; padding: 2px; font-size: 12px; background: #111; border: 1px solid #444; color: #fff; border-radius: 3px; text-align: center; }
+      .tf-me-slider-group input[type=number] { width: 100%; padding: 3px; font-size: 12px; background: #111; border: 1px solid #444; color: #fff; border-radius: 3px; text-align: center; }
       .tf-me-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
       .tf-me-actions button { padding: 9px 10px; border: none; border-radius: 6px; color: #fff; cursor: pointer; background: rgba(255,255,255,.1); font-weight: 600; font-size: 14px; }
       .tf-me-actions .primary { background: #2575fc; }
@@ -63,25 +68,27 @@
     scope.panel = document.createElement('div');
     scope.panel.id = 'tf-mesh-editor-panel';
     scope.panel.innerHTML = `
-      <div class="tf-me-header">
-        <span>Mesh Editor</span>
-        <div id="tf-me-counter" class="tf-me-pill">0 boxes</div>
-      </div>
-      <div class="tf-me-sliders">
-        <div class="tf-me-slider-group" data-control="posX"><label>X</label><input type="range" min="-5" max="5" step="0.05" value="0"><input type="number" step="0.05" value="0"></div>
-        <div class="tf-me-slider-group" data-control="posY"><label>Y</label><input type="range" min="-5" max="5" step="0.05" value="0"><input type="number" step="0.05" value="0"></div>
-        <div class="tf-me-slider-group" data-control="posZ"><label>Z</label><input type="range" min="-5" max="5" step="0.05" value="0"><input type="number" step="0.05" value="0"></div>
-        <div class="tf-me-slider-group" data-control="sizeW"><label>W</label><input type="range" min="0.1" max="10" step="0.05" value="1"><input type="number" step="0.05" value="1"></div>
-        <div class="tf-me-slider-group" data-control="sizeH"><label>H</label><input type="range" min="0.1" max="10" step="0.05" value="1"><input type="number" step="0.05" value="1"></div>
-        <div class="tf-me-slider-group" data-control="sizeD"><label>D</label><input type="range" min="0.1" max="10" step="0.05" value="1"><input type="number" step="0.05" value="1"></div>
-      </div>
-      <div class="tf-me-actions">
-        <button id="tf-me-add" class="primary">Add Box</button>
-        <button id="tf-me-clear">Clear All</button>
-      </div>
-       <div class="tf-me-actions">
-         <button id="tf-me-erase" class="danger" disabled>Erase Selection</button>
-         <button id="tf-me-close">Close</button>
+      <div class="tf-me-content-wrapper">
+        <div class="tf-me-header">
+          <span>Mesh Editor</span>
+          <div id="tf-me-counter" class="tf-me-pill">0 boxes</div>
+        </div>
+        <div class="tf-me-sliders">
+          <div class="tf-me-slider-group" data-control="posX"><label>X</label><input type="range" min="-5" max="5" step="0.05" value="0"><input type="number" step="0.05" value="0"></div>
+          <div class="tf-me-slider-group" data-control="posY"><label>Y</label><input type="range" min="-5" max="5" step="0.05" value="0"><input type="number" step="0.05" value="0"></div>
+          <div class="tf-me-slider-group" data-control="posZ"><label>Z</label><input type="range" min="-5" max="5" step="0.05" value="0"><input type="number" step="0.05" value="0"></div>
+          <div class="tf-me-slider-group" data-control="sizeW"><label>W</label><input type="range" min="0.1" max="10" step="0.05" value="1"><input type="number" step="0.05" value="1"></div>
+          <div class="tf-me-slider-group" data-control="sizeH"><label>H</label><input type="range" min="0.1" max="10" step="0.05" value="1"><input type="number" step="0.05" value="1"></div>
+          <div class="tf-me-slider-group" data-control="sizeD"><label>D</label><input type="range" min="0.1" max="10" step="0.05" value="1"><input type="number" step="0.05" value="1"></div>
+        </div>
+        <div class="tf-me-actions">
+          <button id="tf-me-add" class="primary">Add Box</button>
+          <button id="tf-me-clear">Clear All</button>
+        </div>
+        <div class="tf-me-actions">
+          <button id="tf-me-erase" class="danger" disabled>Erase Selection</button>
+          <button id="tf-me-close">Close</button>
+        </div>
       </div>
     `;
     document.getElementById('app')?.appendChild(scope.panel);
@@ -150,7 +157,7 @@
     updateSlider('posZ', position.z);
     updateSlider('sizeW', scale.x);
     updateSlider('sizeH', scale.y);
-    updateSlider('sizeD', scale.z); // Corrected from scale.d
+    updateSlider('sizeD', scale.z);
   }
 
   function updateSlider(controlName, value) {
@@ -247,8 +254,8 @@
     mesh.scale.set(w, h, d);
     return mesh;
   }
-
-  // (The rest of the functions like onErase, eraseGeometryInsideBoxes, mergeBoxIntoList, etc., remain the same as they deal with the underlying data, not the UI interaction)
+  
+  // (The rest of the functions like onErase, eraseGeometryInsideBoxes, etc., are unchanged)
 
   const idle = (ms = 12) => new Promise(r => (self.requestIdleCallback || setTimeout)(r, ms));
   
@@ -279,7 +286,7 @@
   async function onErase() {
     const {targetMesh, boxes, activeAsset} = scope.state;
     if (!targetMesh || boxes.length === 0) return;
-    const progEl = document.getElementById('tf-me-progress'); // This element is created in your original code
+    const progEl = document.getElementById('tf-me-progress');
     const showProgress = (show, pct, label) => {
         if (!progEl) return;
         progEl.classList.toggle('show', !!show);
@@ -360,7 +367,6 @@
       console.error("MeshEditor could not initialize: THREE.js not found.");
       return;
     }
-    // Safely populate the scope with dependencies now that the app is ready.
     scope.THREE = window.Phonebook.THREE;
 
     injectUI();
