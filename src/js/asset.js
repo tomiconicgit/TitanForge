@@ -21,16 +21,11 @@
             if (!child.isMesh || !child.material) return;
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             mats.forEach(mat => {
-                // ================== FIX START ==================
-                // Only enforce opaque settings if the material is NOT already transparent.
-                // This preserves the transparency of the proxy plane or other glass-like materials.
                 if (!mat.transparent) {
                     mat.transparent = false;
                     mat.opacity = 1;
                     mat.alphaTest = 0;
                 }
-                // =================== FIX END ===================
-
                 mat.depthWrite = true;
                 mat.depthTest = true;
                 mat.side = THREE.FrontSide;
@@ -51,16 +46,14 @@
 
     // --- UI Injection ---
     function injectUI() {
-        // A separate file input is needed for this module
         fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = '.glb';
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
 
-        // A separate modal is also needed to avoid conflicts
         loadingModal = document.createElement('div');
-        loadingModal.className = 'tf-modal-overlay'; // Reusing styles from model.js
+        loadingModal.className = 'tf-modal-overlay';
         loadingModal.innerHTML = `
             <div class="tf-loading-modal">
                 <div class="title">Loading Asset</div>
@@ -72,7 +65,6 @@
         document.body.appendChild(loadingModal);
     }
     
-    // --- Modal Control ---
     function showLoadingModal(visible) {
         loadingModal.classList.toggle('show', visible);
     }
@@ -90,16 +82,14 @@
         btn.onclick = () => showLoadingModal(false);
     }
 
-    // --- Asset Loading Logic ---
     function loadFromFile(file) {
-        const { GLTFLoader } = window.Phonebook;
+        const { GLTFLoader, THREE } = window.Phonebook;
         const reader = new FileReader();
         
         reader.onload = (e) => {
             updateModalProgress(25, 'Parsing file...');
             const loader = new GLTFLoader();
             loader.parse(e.target.result, '', (gltf) => {
-                // On Success
                 updateModalProgress(90, 'Processing scene...');
                 const asset = gltf.scene;
                 let vertexCount = 0;
@@ -108,8 +98,11 @@
                 sanitizeMaterials(asset);
                 
                 // --- MODIFICATION START ---
-                // Check if the asset has a baked-in position. If so, ask the user what to do.
-                const hasPosition = asset.position.lengthSq() > 0.0001;
+                // Correctly detect position by checking the center of the asset's bounding box.
+                const box = new THREE.Box3().setFromObject(asset);
+                const center = box.getCenter(new THREE.Vector3());
+                const hasPosition = center.lengthSq() > 0.0001; // Use bounding box center
+
                 if (!hasPosition || confirm('This asset has a saved position. Do you want to auto-center it at the origin?\n\n(Click OK to center, or Cancel to keep its position).')) {
                     centerAndGroundModel(asset);
                 }
@@ -142,14 +135,12 @@
                     polygons: Math.floor(triangleCount),
                     fileSize: formatBytes(file.size),
                     object: asset,
-                    isMainModel: false // **FIX**: Identify this as an asset
+                    isMainModel: false
                 };
                 
-                // Notify other modules that an asset has been added
                 App.emit('asset:loaded', assetData);
 
             }, (error) => {
-                // On Error
                 console.error('GLTF Parsing Error:', error);
                 updateModalProgress(100, `Error: ${error.message || 'Could not parse file'}`);
                 loadingModal.querySelector('.progress-fill').style.background = '#ff3b30';
@@ -167,12 +158,9 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // --- Bootstrap and Public API ---
     function bootstrap() {
         if (window.AssetManager) return;
-
         injectUI();
-
         fileInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
@@ -182,11 +170,9 @@
             }
             fileInput.value = '';
         });
-
         window.AssetManager = {
             load: () => fileInput.click(),
         };
-
         window.Debug?.log('Asset Manager ready.');
     }
 
