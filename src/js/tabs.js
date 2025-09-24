@@ -78,6 +78,9 @@
             .card-close-btn {
                 background: linear-gradient(90deg, #c62828, #ff3b30); /* Red gradient */
             }
+            .card-skin-btn {
+                background: linear-gradient(90deg, #6a11cb, #2575fc); /* Purple/Blue gradient */
+            }
         `;
         document.head.appendChild(style);
 
@@ -109,6 +112,7 @@
                 </div>
                 <div class="card-actions">
                     <button class="card-active-btn" data-action="make-active">Make Active</button>
+                    <button class="card-skin-btn" data-action="skin">Skin</button>
                     <button class="card-close-btn" data-action="close">Close</button>
                 </div>
             `;
@@ -203,6 +207,12 @@
         } else if (action === 'make-active') {
             event.stopPropagation();
             setActiveAsset(assetId);
+        } else if (action === 'skin') {
+            event.stopPropagation();
+            const assetToSkin = assets.get(assetId);
+            if (assetToSkin && window.Skinning) {
+                window.Skinning.open(assetToSkin);
+            }
         } else {
             setActiveAsset(assetId);
         }
