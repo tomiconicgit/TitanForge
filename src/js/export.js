@@ -1,4 +1,4 @@
-// src/js/export.js Ã¢ÂÂ Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
+// src/js/export.js ÃÂ¢ÃÂÃÂ Main-thread GLB export (no Worker). Rig + textures preserved, mobile-safe.
 (function () {
   'use strict';
 
@@ -102,16 +102,13 @@
   }
 
   function prepareMaterialForExport(mat, THREE) {
-    // Ensure MeshStandardMaterial + sane texture flags
     if (!mat || mat.type !== 'MeshStandardMaterial') {
       const m = new THREE.MeshStandardMaterial();
-      // Copy basic color/rough/metal if present
       if (mat?.color) m.color.copy(mat.color);
       if (typeof mat?.roughness === 'number') m.roughness = mat.roughness;
       if (typeof mat?.metalness === 'number') m.metalness = mat.metalness;
       mat = m;
     }
-    // FlipY must be false for glTF; color space sRGB only for baseColor/emissive
     const maps = ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap'];
     for (const k of maps) {
       const t = mat[k];
@@ -127,61 +124,63 @@
     return mat;
   }
 
+  // --- MODIFICATION START: Replaced the entire function ---
   async function buildExportRoot(asset) {
-    const { THREE, GLTFExporter } = window.Phonebook;
-    await ensureSkeletonUtils();
+      await ensureSkeletonUtils();
+      const { THREE, GLTFExporter } = window.Phonebook;
 
-    const src = asset.object;
-    src.updateWorldMatrix(true, true);
+      const src = asset.object;
+      const originalParent = src.parent;
 
-    // Deep clone (preserves skeleton links)
-    const clone = SkeletonUtils.clone(src);
+      // This is a more robust method for baking transforms, especially for nested objects.
+      // 1. Temporarily detach the object from its parent (e.g., a bone) and attach it to the scene root.
+      //    The .attach() method preserves the object's world transform by recalculating its local transform.
+      window.Viewer.scene.attach(src);
 
-    // Bake root world matrix without modifying bones/skin:
-    // put the clone under a neutral group, and give the clone the world matrix.
-    const root = new THREE.Group();
-    root.name = `ExportRoot_${asset.name}`;
-    root.add(clone);
+      // 2. Now that the object's local transform IS its world transform, we can safely clone it.
+      const clone = SkeletonUtils.clone(src);
 
-    // Apply the original's world transform to the clone as its local transform
-    clone.matrix.copy(src.matrixWorld);
-    clone.matrixAutoUpdate = false;
-    clone.updateMatrixWorld(true);
-
-    // Prune hidden nodes & sanitize materials in small batches
-    let processed = 0;
-    const toProcess = [];
-    root.traverse(o => toProcess.push(o));
-
-    for (let i = 0; i < toProcess.length; i++) {
-      if (cancelRequested) throw new Error('cancelled');
-      const o = toProcess[i];
-
-      // Drop non-visible meshes
-      if ((o.isMesh || o.isSkinnedMesh) && !o.visible) {
-        o.parent?.remove(o);
-        continue;
+      // 3. Immediately re-attach the original object back to its original parent
+      //    so that the user's session is not disturbed.
+      if (originalParent) {
+          originalParent.attach(src);
       }
 
-      if (o.isMesh || o.isSkinnedMesh) {
-        // Tighten geometry draw range if set
-        if (o.geometry && typeof o.geometry.drawRange?.count === 'number' && o.geometry.drawRange.count >= 0) {
-          // nothing to do; GLTFExporter honors truncateDrawRange
-        }
-        // Normalize materials and texture flags
-        if (Array.isArray(o.material)) {
-          o.material = o.material.map(m => prepareMaterialForExport(m, THREE));
-        } else {
-          o.material = prepareMaterialForExport(o.material, THREE);
-        }
+      // The clone now has the correct world transform baked into its local position/rotation/scale.
+      // We can now safely place it in a new root group for export.
+      const root = new THREE.Group();
+      root.name = `ExportRoot_${asset.name.replace(/\.glb/i, '')}`;
+      root.add(clone);
+
+      // Prune hidden nodes & sanitize materials (same as before)
+      let processed = 0;
+      const toProcess = [];
+      root.traverse(o => toProcess.push(o));
+
+      for (let i = 0; i < toProcess.length; i++) {
+          if (cancelRequested) throw new Error('cancelled');
+          const o = toProcess[i];
+
+          if ((o.isMesh || o.isSkinnedMesh) && !o.visible) {
+              o.parent?.remove(o);
+              continue;
+          }
+
+          if (o.isMesh || o.isSkinnedMesh) {
+              if (Array.isArray(o.material)) {
+                  o.material = o.material.map(m => prepareMaterialForExport(m, THREE));
+              } else {
+                  o.material = prepareMaterialForExport(o.material, THREE);
+              }
+          }
+          processed++;
+          if ((processed % 20) === 0) await idle(12);
       }
 
-      processed++;
-      if ((processed % 20) === 0) await idle(12); // yield periodically
-    }
-
-    return { root, GLTFExporter, THREE };
+      return { root, GLTFExporter, THREE };
   }
+  // --- MODIFICATION END ---
+
 
   async function exportAsset(assetId) {
     if (isExporting) return;
@@ -191,7 +190,6 @@
       return;
     }
 
-    // UI state
     isExporting = true;
     cancelRequested = false;
     listContainer.querySelectorAll('button').forEach(b => b.disabled = true);
@@ -213,34 +211,28 @@
 
     let tmpRoot = null;
     try {
-      // 1) Build a minimal, self-contained subtree (with bones) on the main thread
-      updateProgress(12, 'Cloning rig & meshes');
-      const { root, GLTFExporter, THREE } = await buildExportRoot(asset);
+      updateProgress(12, 'Cloning & baking transform');
+      const { root, GLTFExporter } = await buildExportRoot(asset);
       tmpRoot = root;
 
       if (cancelRequested) throw new Error('cancelled');
 
-      // 2) Small settle to let UI paint
       await idle(24);
       updateProgress(28, 'Optimizing & sanitizing');
 
-      // 3) Export options to keep memory sane on mobile
       const opts = {
         binary: true,
         onlyVisible: true,
         truncateDrawRange: true,
         embedImages: true,
-        // iOS is memory-tight; cap textures lower
         maxTextureSize: isIOS() ? 2048 : 4096
       };
 
       if (cancelRequested) throw new Error('cancelled');
 
-      // 4) Kick exporter (this part is CPU-heavy and not cancellable)
       updateProgress(62, 'Packaging GLB');
       const exporter = new GLTFExporter();
 
-      // Promisify parse
       const glb = await new Promise((resolve, reject) => {
         try {
           exporter.parse(
@@ -255,7 +247,6 @@
       });
 
       if (!glb) throw new Error('Export produced empty file');
-
       updateProgress(92, 'Creating file');
 
       const blob = new Blob([glb], { type: 'model/gltf-binary' });
@@ -273,14 +264,13 @@
       setTimeout(() => showModal(false), 1200);
     } catch (err) {
       if (String(err.message || err) === 'cancelled') {
-        // UI already updated in cancel handler
+        // UI already updated
       } else {
         console.error('Export error:', err);
         updateProgress(100, 'Export failed');
         progressFill.style.background = '#ff3b30';
       }
     } finally {
-      // Free the temporary clone ASAP
       if (tmpRoot) {
         try { disposeClone(tmpRoot); } catch {}
         tmpRoot = null;
