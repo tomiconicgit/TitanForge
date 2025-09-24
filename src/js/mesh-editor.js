@@ -8,29 +8,27 @@
     let originalGeometry = null;    // A backup of the geometry for 'cancel'
     let activeAssetId = null;       // The ID of the parent asset
     
-    let toolbar, transformControls, selectionBox;
+    // --- MODIFICATION: Added references for new UI elements ---
+    let toolbar, transformControls, selectionBox, sliderGroup, hSlider, vSlider;
     let isEditing = false;
 
     // --- UI Injection ---
     function injectUI() {
         const style = document.createElement('style');
         style.textContent = `
-            /* This is now a floating toolbar, not a full-screen modal */
             #tf-mesh-editor-toolbar {
                 position: fixed;
-                bottom: 80px; /* Position it above the lower nav panels */
+                bottom: 80px;
                 left: 16px;
                 right: 16px;
-                z-index: 20; /* Above nav panels but below modals */
-                
+                z-index: 20;
                 padding: 10px;
                 background: rgba(28, 38, 50, 0.9);
                 backdrop-filter: blur(10px);
                 -webkit-backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
-                
-                display: none; /* Hidden by default */
+                display: none;
                 justify-content: space-between;
                 align-items: center;
                 gap: 10px;
@@ -45,57 +43,100 @@
 
             .tf-toggle-row { display: flex; align-items: center; gap: 8px; }
             .tf-toggle-row label { color: #e6eef6; font-size: 15px; }
+
+            /* --- MODIFICATION: CSS for new sliders --- */
+            .slider-control { display: flex; align-items: center; gap: 5px; }
+            .slider-control label { color: #a0a7b0; font-size: 12px; font-weight: bold; }
+            #tf-mesh-editor-toolbar input[type=range] {
+                width: 70px;
+                -webkit-appearance: none;
+                height: 4px;
+                background: rgba(0,0,0,0.3);
+                border-radius: 2px;
+                vertical-align: middle;
+            }
+            #tf-mesh-editor-toolbar input[type=range]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 14px;
+                height: 14px;
+                background: #fff;
+                border-radius: 50%;
+                cursor: pointer;
+                border: 2px solid #2575fc;
+            }
         `;
         document.head.appendChild(style);
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
+        // --- MODIFICATION: Added HTML for the slider group ---
         toolbar.innerHTML = `
             <div class="tool-group">
                 <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
             </div>
             <div class="tool-group">
-                <div class="tf-toggle-row">
-                    <label>Erase Mode</label>
-                </div>
                 <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Box Erase</button>
-                <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
+                <div id="editor-slider-group" style="display:none; align-items: center; gap: 10px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 10px;">
+                    <div class="slider-control">
+                        <label for="editor-scale-h">H</label>
+                        <input type="range" id="editor-scale-h" min="0.01" max="3" step="0.01" value="1" title="Horizontal Size">
+                    </div>
+                    <div class="slider-control">
+                        <label for="editor-scale-v">V</label>
+                        <input type="range" id="editor-scale-v" min="0.01" max="3" step="0.01" value="1" title="Vertical Size">
+                    </div>
+                </div>
             </div>
             <div class="tool-group">
+                <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
                 <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
             </div>
         `;
         document.getElementById('app').appendChild(toolbar);
 
-        // --- Event Listeners ---
+        // --- MODIFICATION: Get references to new elements and add listeners ---
+        sliderGroup = toolbar.querySelector('#editor-slider-group');
+        hSlider = toolbar.querySelector('#editor-scale-h');
+        vSlider = toolbar.querySelector('#editor-scale-v');
+
+        hSlider.addEventListener('input', (e) => {
+            if (selectionBox) {
+                const value = parseFloat(e.target.value);
+                selectionBox.scale.x = value;
+                selectionBox.scale.z = value;
+            }
+        });
+
+        vSlider.addEventListener('input', (e) => {
+            if (selectionBox) {
+                const value = parseFloat(e.target.value);
+                selectionBox.scale.y = value;
+            }
+        });
+
         toolbar.querySelector('#editor-save-btn').addEventListener('click', () => close(true));
         toolbar.querySelector('#editor-cancel-btn').addEventListener('click', () => close(false));
         toolbar.querySelector('#editor-box-tool-btn').addEventListener('click', showSelectionBox);
         toolbar.querySelector('#editor-apply-box-btn').addEventListener('click', applyBoxErase);
     }
 
-    // --- Core Editor Logic ---
     async function open(mesh, assetId) {
-        if (isEditing) return; // Prevent opening multiple edit sessions
+        if (isEditing) return;
         isEditing = true;
 
         originalMesh = mesh;
         activeAssetId = assetId;
 
-        // CRITICAL: Create a backup of the geometry for the cancel/undo functionality.
         originalGeometry = originalMesh.geometry.clone();
 
-        // Disable main viewer controls so we can use the editor tools
         if (window.Viewer && window.Viewer.controls) {
             window.Viewer.controls.enabled = false;
         }
 
-        // Setup TransformControls for the selection box
         if (!transformControls) {
             const { TransformControls } = await import('three/addons/controls/TransformControls.js');
             transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
             transformControls.addEventListener('dragging-changed', (event) => {
-                // While dragging the box, keep main controls disabled
                 if(window.Viewer.controls) window.Viewer.controls.enabled = !event.value;
             });
             window.Viewer.scene.add(transformControls);
@@ -108,27 +149,19 @@
         if (!isEditing) return;
 
         if (shouldSaveChanges) {
-            // The geometry on originalMesh is already the edited version.
-            // We just need to dispose of the backup.
             if(originalGeometry) originalGeometry.dispose();
-            
-            // Notify other modules that the mesh has changed
             App.emit('asset:updated', { id: activeAssetId });
             window.Debug?.log('Mesh edits applied.');
-
         } else {
-            // User cancelled. Restore the backup geometry.
             if (originalMesh && originalGeometry) {
-                originalMesh.geometry.dispose(); // Dispose of the edited, unsaved geometry
-                originalMesh.geometry = originalGeometry; // Restore the backup
+                originalMesh.geometry.dispose();
+                originalMesh.geometry = originalGeometry;
                 window.Debug?.log('Mesh edits cancelled.');
             }
         }
         
-        // --- Universal Cleanup ---
         toolbar.style.display = 'none';
         
-        // Clean up selection box and transform controls
         if (selectionBox) {
             transformControls.detach();
             window.Viewer.scene.remove(selectionBox);
@@ -136,46 +169,48 @@
             selectionBox = null;
         }
         if(transformControls) transformControls.detach();
+        
+        // --- MODIFICATION: Hide slider and Apply button on close ---
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
+        sliderGroup.style.display = 'none';
 
-        // Re-enable main viewer controls
         if (window.Viewer && window.Viewer.controls) {
             window.Viewer.controls.enabled = true;
         }
         
-        // Reset state
         originalMesh = null;
         originalGeometry = null;
         activeAssetId = null;
         isEditing = false;
     }
     
-    // --- Tool Implementation ---
     function showSelectionBox() {
-        if (selectionBox) { // If box already exists, just re-attach controls
-             transformControls.attach(selectionBox);
-             return;
-        };
-        const { THREE } = window.Phonebook;
+        if (!selectionBox) {
+            const { THREE } = window.Phonebook;
+            const geo = new THREE.BoxGeometry(1, 1, 1);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00c853, transparent: true, opacity: 0.3, wireframe: true });
+            selectionBox = new THREE.Mesh(geo, mat);
 
-        const geo = new THREE.BoxGeometry(1, 1, 1);
-        const mat = new THREE.MeshBasicMaterial({ color: 0x00c853, transparent: true, opacity: 0.3, wireframe: true });
-        selectionBox = new THREE.Mesh(geo, mat);
-
-        const meshBox = new THREE.Box3().setFromObject(originalMesh);
-        selectionBox.position.copy(meshBox.getCenter(new THREE.Vector3()));
-        const size = meshBox.getSize(new THREE.Vector3());
-        selectionBox.scale.set(size.x * 0.5, size.y * 0.5, size.z * 0.5);
-
-        window.Viewer.scene.add(selectionBox);
+            const meshBox = new THREE.Box3().setFromObject(originalMesh);
+            selectionBox.position.copy(meshBox.getCenter(new THREE.Vector3()));
+            const size = meshBox.getSize(new THREE.Vector3());
+            // Start with a sensible default size
+            selectionBox.scale.set(size.x * 0.5, size.y * 0.5, size.z * 0.5);
+            window.Viewer.scene.add(selectionBox);
+        }
+        
         transformControls.attach(selectionBox);
+        
+        // --- MODIFICATION: Show sliders and sync their values ---
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
+        sliderGroup.style.display = 'flex';
+        hSlider.value = selectionBox.scale.x;
+        vSlider.value = selectionBox.scale.y;
     }
 
     function applyBoxErase() {
         if (!selectionBox || !originalMesh) return;
         
-        // The mesh being edited is now originalMesh directly
         const geometry = originalMesh.geometry;
         const vertices = geometry.attributes.position;
         
@@ -185,8 +220,8 @@
 
         for (let i = 0; i < vertices.count; i++) {
             tempVertex.fromBufferAttribute(vertices, i);
-            tempVertex.applyMatrix4(originalMesh.matrixWorld); // From mesh's local to world space
-            tempVertex.applyMatrix4(boxMatrixInverse); // From world space to box's local space
+            tempVertex.applyMatrix4(originalMesh.matrixWorld);
+            tempVertex.applyMatrix4(boxMatrixInverse);
 
             if (Math.abs(tempVertex.x) <= 0.5 && Math.abs(tempVertex.y) <= 0.5 && Math.abs(tempVertex.z) <= 0.5) {
                 if (geometry.index) {
@@ -204,6 +239,7 @@
         }
 
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
+        sliderGroup.style.display = 'none'; // --- MODIFICATION: Hide sliders after applying
         transformControls.detach();
     }
 
@@ -230,12 +266,11 @@
         if(oldGeo.attributes.uv) newGeo.setAttribute('uv', oldGeo.attributes.uv);
         newGeo.setIndex(newIndices);
         
-        originalMesh.geometry.dispose(); // Dispose of the old geometry with all faces
-        originalMesh.geometry = newGeo; // Assign the new, smaller geometry
+        originalMesh.geometry.dispose();
+        originalMesh.geometry = newGeo;
         window.Debug?.log(`Erased ${facesToDelete.size} faces.`);
     }
 
-    // --- Public API ---
     function bootstrap() {
         if (window.MeshEditor) return;
         injectUI();
