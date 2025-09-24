@@ -22,16 +22,11 @@
             if (!child.isMesh || !child.material) return;
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             mats.forEach(mat => {
-                // ================== FIX START ==================
-                // Only enforce opaque settings if the material is NOT already transparent.
-                // This preserves the transparency of the proxy plane or other glass-like materials.
                 if (!mat.transparent) {
                     mat.transparent = false;
                     mat.opacity = 1;
                     mat.alphaTest = 0;
                 }
-                // =================== FIX END ===================
-
                 mat.depthWrite = true;
                 mat.depthTest = true;
                 mat.side = THREE.FrontSide;
@@ -52,14 +47,12 @@
 
     // --- UI Injection ---
     function injectUI() {
-        // Hidden file input to trigger file selection
         fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = '.glb';
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
 
-        // Loading modal
         const style = document.createElement('style');
         style.textContent = `
             .tf-modal-overlay {
@@ -108,7 +101,6 @@
         document.body.appendChild(loadingModal);
     }
     
-    // --- Modal Control ---
     function showLoadingModal(visible) {
         loadingModal.classList.toggle('show', visible);
     }
@@ -126,16 +118,14 @@
         btn.onclick = () => showLoadingModal(false);
     }
 
-    // --- Model Loading Logic ---
     function loadFromFile(file) {
-        const { GLTFLoader } = window.Phonebook;
+        const { GLTFLoader, THREE } = window.Phonebook;
         const reader = new FileReader();
         
         reader.onload = (e) => {
             updateModalProgress(25, 'Parsing file...');
             const loader = new GLTFLoader();
             loader.parse(e.target.result, '', (gltf) => {
-                // --- On Success ---
                 updateModalProgress(90, 'Processing scene...');
                 const model = gltf.scene;
                 let vertexCount = 0;
@@ -144,9 +134,11 @@
                 sanitizeMaterials(model);
                 
                 // --- MODIFICATION START ---
-                // Check if the model has a baked-in position. If so, ask the user what to do.
-                // A small threshold is used to account for floating point inaccuracies.
-                const hasPosition = model.position.lengthSq() > 0.0001;
+                // Correctly detect position by checking the center of the model's bounding box.
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const hasPosition = center.lengthSq() > 0.0001; // Use bounding box center
+
                 if (!hasPosition || confirm('This model has a saved position. Do you want to auto-center it at the origin?\n\n(Click OK to center, or Cancel to keep its position).')) {
                     centerAndGroundModel(model);
                 }
@@ -155,7 +147,7 @@
                 model.traverse(obj => {
                     if (obj.isMesh) {
                         obj.castShadow = true;
-                        obj.receiveShadow = true; // Allow self-shadowing
+                        obj.receiveShadow = true;
                         if (obj.geometry) {
                             vertexCount += obj.geometry.attributes.position.count;
                             if (obj.geometry.index) {
@@ -179,24 +171,22 @@
                     polygons: Math.floor(triangleCount),
                     fileSize: formatBytes(file.size),
                     object: model,
-                    isMainModel: true // **FIX**: Identify this as a main model
+                    isMainModel: true
                 };
                 
-                // Notify other modules (like tabs.js) that a model has been added
                 App.emit('asset:loaded', modelData);
 
             }, (error) => {
-                // --- On Error ---
                 console.error('GLTF Parsing Error:', error);
                 updateModalProgress(100, `Error: ${error.message || 'Could not parse file'}`);
-                loadingModal.querySelector('.progress-fill').style.background = '#ff3b30'; // Error color
+                loadingModal.querySelector('.progress-fill').style.background = '#ff3b30';
                 showCompleteButton();
             });
         };
         
         reader.onprogress = (e) => {
             if (e.lengthComputable) {
-                const percent = (e.loaded / e.total) * 20; // Reading is first 20% of the bar
+                const percent = (e.loaded / e.total) * 20;
                 updateModalProgress(percent, 'Reading file...');
             }
         };
@@ -204,29 +194,21 @@
         reader.readAsArrayBuffer(file);
     }
 
-
-    // --- Bootstrap and Public API ---
     function bootstrap() {
         if (window.ModelManager) return;
-
         injectUI();
-
         fileInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
                 showLoadingModal(true);
                 updateModalProgress(0, 'Preparing to load...');
-                // Use a timeout to allow the modal to animate in smoothly
                 setTimeout(() => loadFromFile(file), 300);
             }
-            fileInput.value = ''; // Reset for next time
+            fileInput.value = '';
         });
-
         window.ModelManager = {
-            // The main function to be called from the menu
             load: () => fileInput.click(),
         };
-
         window.Debug?.log('Model Manager ready.');
     }
 
