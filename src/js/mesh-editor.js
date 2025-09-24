@@ -33,12 +33,8 @@
     raycaster: null
   };
 
-  // --- MODIFICATION START ---
-  // The redundant check for THREE.js has been removed from here.
-  // The main.js file already guarantees that window.Phonebook and THREE are available
-  // before this script is ever loaded.
-  const { THREE } = window.Phonebook;
-  // --- MODIFICATION END ---
+  // --- MODIFICATION: THREE.js is now loaded safely inside bootstrap ---
+  let THREE;
 
   // ----- UI -----
   let panel, lockCheckbox, eraseBtn, clearBtn, closeBtn, counterEl, hintEl;
@@ -151,6 +147,10 @@
 
   // ----- Open/Close -----
   function openForMesh(mesh) {
+    if (!THREE) {
+      alert("Mesh Editor has not finished initializing. Please try again.");
+      return;
+    }
     if (!mesh || !(mesh.isMesh || mesh.isSkinnedMesh)) {
       alert('Select a mesh to edit.');
       return;
@@ -583,6 +583,13 @@
 
   // ----- Bootstrap -----
   function bootstrap() {
+    // --- FIX APPLIED: Safely get THREE from the global Phonebook ---
+    if (!window.Phonebook || !window.Phonebook.THREE) {
+        console.error("MeshEditor could not initialize: THREE.js not found in Phonebook.");
+        return;
+    }
+    THREE = window.Phonebook.THREE;
+
     injectUI();
     window.App?.on('asset:activated', handleAssetActivated);
     window.Debug?.log('Mesh Editor ready (touch box erase).');
