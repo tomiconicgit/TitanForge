@@ -8,14 +8,13 @@
     let originalGeometry = null;
     let activeAssetId = null;
     
-    let toolbar, transformControls, selectionBox;
+    let toolbar, transformControls, selectionBox, selectionBoxPivot;
     let toolSettings, hSlider, vSlider, xSlider, ySlider, zSlider;
     let isEditing = false;
 
     // --- UI Injection ---
     function injectUI() {
         const style = document.createElement('style');
-        // --- MODIFICATION: Updated CSS for a two-row slider layout ---
         style.textContent = `
             #tf-mesh-editor-toolbar {
                 position: fixed;
@@ -43,14 +42,14 @@
             #editor-tool-settings {
                 flex-grow: 1;
                 display: flex;
-                flex-direction: column; /* Stack slider rows vertically */
+                flex-direction: column;
                 align-items: center;
-                gap: 5px; /* Space between the two rows of sliders */
+                gap: 5px;
             }
             .slider-row {
                 display: flex;
                 justify-content: center;
-                gap: 10px; /* Space between sliders in the same row */
+                gap: 10px;
             }
             .tf-editor-btn {
                 padding: 8px 16px; font-size: 14px; font-weight: 600;
@@ -62,27 +61,20 @@
             .slider-control { display: flex; align-items: center; gap: 5px; }
             .slider-control label { color: #a0a7b0; font-size: 12px; font-weight: bold; width: 15px; text-align: center; }
             #tf-mesh-editor-toolbar input[type=range] {
-                width: 70px;
-                -webkit-appearance: none;
-                height: 4px;
-                background: rgba(0,0,0,0.3);
-                border-radius: 2px;
-                vertical-align: middle;
+                width: 70px; -webkit-appearance: none;
+                height: 4px; background: rgba(0,0,0,0.3);
+                border-radius: 2px; vertical-align: middle;
             }
             #tf-mesh-editor-toolbar input[type=range]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                width: 14px; height: 14px;
-                background: #fff;
-                border-radius: 50%;
-                cursor: pointer;
-                border: 2px solid #2575fc;
+                -webkit-appearance: none; width: 14px; height: 14px;
+                background: #fff; border-radius: 50%;
+                cursor: pointer; border: 2px solid #2575fc;
             }
         `;
         document.head.appendChild(style);
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
-        // --- MODIFICATION: New HTML structure with nested slider-row divs ---
         toolbar.innerHTML = `
             <div class="editor-toolbar-row">
                  <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Show Erase Box</button>
@@ -90,11 +82,11 @@
                     <div class="slider-row">
                         <div class="slider-control">
                             <label for="editor-scale-h">H</label>
-                            <input type="range" id="editor-scale-h" min="0.01" max="3" step="0.01" value="1" title="Horizontal Size">
+                            <input type="range" id="editor-scale-h" min="0.01" max="5" step="0.01" value="1" title="Horizontal Size">
                         </div>
                         <div class="slider-control">
                             <label for="editor-scale-v">V</label>
-                            <input type="range" id="editor-scale-v" min="0.01" max="3" step="0.01" value="1" title="Vertical Size">
+                            <input type="range" id="editor-scale-v" min="0.01" max="5" step="0.01" value="1" title="Vertical Size">
                         </div>
                     </div>
                     <div class="slider-row">
@@ -156,17 +148,6 @@
         if (!transformControls) {
             const { TransformControls } = await import('three/addons/controls/TransformControls.js');
             transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
-            
-            transformControls.addEventListener('objectChange', () => {
-                if (selectionBox) {
-                    hSlider.value = selectionBox.scale.x;
-                    vSlider.value = selectionBox.scale.y;
-                    xSlider.value = selectionBox.position.x;
-                    ySlider.value = selectionBox.position.y;
-                    zSlider.value = selectionBox.position.z;
-                }
-            });
-
             transformControls.addEventListener('dragging-changed', (event) => {
                 if(window.Viewer.controls) window.Viewer.controls.enabled = !event.value;
             });
@@ -193,13 +174,13 @@
         
         toolbar.style.display = 'none';
         
-        if (selectionBox) {
+        if (selectionBoxPivot) {
             transformControls.detach();
-            window.Viewer.scene.remove(selectionBox);
+            window.Viewer.scene.remove(selectionBoxPivot);
             selectionBox.geometry.dispose();
             selectionBox = null;
+            selectionBoxPivot = null;
         }
-        if(transformControls) transformControls.detach();
         
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
         toolSettings.style.display = 'none';
@@ -215,27 +196,39 @@
     }
     
     function showSelectionBox() {
-        if (!selectionBox) {
-            const { THREE } = window.Phonebook;
+        const { THREE } = window.Phonebook;
+
+        if (!selectionBoxPivot) {
+            // Create an invisible pivot point
+            selectionBoxPivot = new THREE.Group();
+            window.Viewer.scene.add(selectionBoxPivot);
+            
+            // Create the visible red box
             const geo = new THREE.BoxGeometry(1, 1, 1);
             const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
             selectionBox = new THREE.Mesh(geo, mat);
-            window.Viewer.scene.add(selectionBox);
+            
+            // Add the box to the pivot
+            selectionBoxPivot.add(selectionBox);
         }
         
-        const meshBox = new window.Phonebook.THREE.Box3().setFromObject(originalMesh);
+        // Position the PIVOT at the center of the mesh
+        const meshBox = new THREE.Box3().setFromObject(originalMesh);
         const center = meshBox.getCenter(new THREE.Vector3());
+        selectionBoxPivot.position.copy(center);
         
-        // Detach from gizmo to reset position without firing 'objectChange'
-        transformControls.detach();
-        selectionBox.position.copy(center);
-        selectionBox.scale.set(1,1,1);
-        transformControls.attach(selectionBox);
+        // Reset the BOX's local position and scale inside the pivot
+        selectionBox.position.set(0, 0, 0);
+        selectionBox.scale.set(1, 1, 1);
         
+        // Attach the gizmo to the PIVOT for coarse movement
+        transformControls.attach(selectionBoxPivot);
+        
+        // Show the UI
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
         toolSettings.style.display = 'flex';
 
-        // Sync all sliders to the box's initial state
+        // Sync all sliders to the box's LOCAL state
         hSlider.value = selectionBox.scale.x;
         vSlider.value = selectionBox.scale.y;
         xSlider.value = selectionBox.position.x;
