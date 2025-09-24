@@ -4,12 +4,13 @@
     'use strict';
 
     // --- Module State ---
-    let originalMesh = null;        // The mesh being edited
-    let originalGeometry = null;    // A backup of the geometry for 'cancel'
-    let activeAssetId = null;       // The ID of the parent asset
+    let originalMesh = null;
+    let originalGeometry = null;
+    let activeAssetId = null;
     
     // --- MODIFICATION: Added references for new UI elements ---
-    let toolbar, transformControls, selectionBox, sliderGroup, hSlider, vSlider;
+    let toolbar, transformControls, selectionBox;
+    let toolSettings, hSlider, vSlider, xSlider, ySlider, zSlider;
     let isEditing = false;
 
     // --- UI Injection ---
@@ -29,11 +30,23 @@
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
                 display: none;
+                /* --- MODIFICATION: New layout using column flex --- */
+                flex-direction: column;
+                gap: 8px;
+            }
+            .editor-toolbar-row {
+                display: flex;
+                width: 100%;
                 justify-content: space-between;
                 align-items: center;
                 gap: 10px;
             }
-            #tf-mesh-editor-toolbar .tool-group { display: flex; gap: 10px; align-items: center; }
+            #editor-tool-settings {
+                flex-grow: 1;
+                display: flex;
+                justify-content: center;
+                gap: 15px;
+            }
             .tf-editor-btn {
                 padding: 8px 16px; font-size: 14px; font-weight: 600;
                 border-radius: 6px; border: none; cursor: pointer;
@@ -41,14 +54,10 @@
             .tf-editor-btn-primary { background: #00c853; color: #fff; }
             .tf-editor-btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
 
-            .tf-toggle-row { display: flex; align-items: center; gap: 8px; }
-            .tf-toggle-row label { color: #e6eef6; font-size: 15px; }
-
-            /* --- MODIFICATION: CSS for new sliders --- */
             .slider-control { display: flex; align-items: center; gap: 5px; }
-            .slider-control label { color: #a0a7b0; font-size: 12px; font-weight: bold; }
+            .slider-control label { color: #a0a7b0; font-size: 12px; font-weight: bold; width: 15px; text-align: center; }
             #tf-mesh-editor-toolbar input[type=range] {
-                width: 70px;
+                width: 80px;
                 -webkit-appearance: none;
                 height: 4px;
                 background: rgba(0,0,0,0.3);
@@ -57,8 +66,7 @@
             }
             #tf-mesh-editor-toolbar input[type=range]::-webkit-slider-thumb {
                 -webkit-appearance: none;
-                width: 14px;
-                height: 14px;
+                width: 14px; height: 14px;
                 background: #fff;
                 border-radius: 50%;
                 cursor: pointer;
@@ -69,50 +77,54 @@
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
-        // --- MODIFICATION: Added HTML for the slider group ---
+        // --- MODIFICATION: New HTML structure for rows and all sliders ---
         toolbar.innerHTML = `
-            <div class="tool-group">
+            <div class="editor-toolbar-row">
+                 <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Show Erase Box</button>
+                 <div id="editor-tool-settings" style="display:none;">
+                    <div class="slider-control">
+                        <label>H</label>
+                        <input type="range" id="editor-scale-h" min="0.01" max="5" step="0.01" value="1" title="Horizontal Size">
+                    </div>
+                    <div class="slider-control">
+                        <label>V</label>
+                        <input type="range" id="editor-scale-v" min="0.01" max="5" step="0.01" value="1" title="Vertical Size">
+                    </div>
+                    <div class="slider-control">
+                        <label>X</label>
+                        <input type="range" id="editor-pos-x" min="-5" max="5" step="0.01" value="0" title="Left/Right Position">
+                    </div>
+                    <div class="slider-control">
+                        <label>Y</label>
+                        <input type="range" id="editor-pos-y" min="-5" max="5" step="0.01" value="0" title="Up/Down Position">
+                    </div>
+                    <div class="slider-control">
+                        <label>Z</label>
+                        <input type="range" id="editor-pos-z" min="-5" max="5" step="0.01" value="0" title="Forward/Back Position">
+                    </div>
+                 </div>
+                 <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
+            </div>
+            <div class="editor-toolbar-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
                 <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
-            </div>
-            <div class="tool-group">
-                <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Box Erase</button>
-                <div id="editor-slider-group" style="display:none; align-items: center; gap: 10px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 10px;">
-                    <div class="slider-control">
-                        <label for="editor-scale-h">H</label>
-                        <input type="range" id="editor-scale-h" min="0.01" max="3" step="0.01" value="1" title="Horizontal Size">
-                    </div>
-                    <div class="slider-control">
-                        <label for="editor-scale-v">V</label>
-                        <input type="range" id="editor-scale-v" min="0.01" max="3" step="0.01" value="1" title="Vertical Size">
-                    </div>
-                </div>
-            </div>
-            <div class="tool-group">
-                <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
+                <div style="flex-grow: 1;"></div>
                 <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
             </div>
         `;
         document.getElementById('app').appendChild(toolbar);
 
-        // --- MODIFICATION: Get references to new elements and add listeners ---
-        sliderGroup = toolbar.querySelector('#editor-slider-group');
+        toolSettings = toolbar.querySelector('#editor-tool-settings');
         hSlider = toolbar.querySelector('#editor-scale-h');
         vSlider = toolbar.querySelector('#editor-scale-v');
+        xSlider = toolbar.querySelector('#editor-pos-x');
+        ySlider = toolbar.querySelector('#editor-pos-y');
+        zSlider = toolbar.querySelector('#editor-pos-z');
 
-        hSlider.addEventListener('input', (e) => {
-            if (selectionBox) {
-                const value = parseFloat(e.target.value);
-                selectionBox.scale.x = value;
-                selectionBox.scale.z = value;
-            }
-        });
-
-        vSlider.addEventListener('input', (e) => {
-            if (selectionBox) {
-                const value = parseFloat(e.target.value);
-                selectionBox.scale.y = value;
-            }
-        });
+        hSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.scale.x = selectionBox.scale.z = parseFloat(e.target.value); } });
+        vSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.scale.y = parseFloat(e.target.value); } });
+        xSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.position.x = parseFloat(e.target.value); } });
+        ySlider.addEventListener('input', e => { if (selectionBox) { selectionBox.position.y = parseFloat(e.target.value); } });
+        zSlider.addEventListener('input', e => { if (selectionBox) { selectionBox.position.z = parseFloat(e.target.value); } });
 
         toolbar.querySelector('#editor-save-btn').addEventListener('click', () => close(true));
         toolbar.querySelector('#editor-cancel-btn').addEventListener('click', () => close(false));
@@ -126,7 +138,6 @@
 
         originalMesh = mesh;
         activeAssetId = assetId;
-
         originalGeometry = originalMesh.geometry.clone();
 
         if (window.Viewer && window.Viewer.controls) {
@@ -136,6 +147,18 @@
         if (!transformControls) {
             const { TransformControls } = await import('three/addons/controls/TransformControls.js');
             transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
+            
+            // --- MODIFICATION: Sync sliders when gizmo is moved ---
+            transformControls.addEventListener('objectChange', () => {
+                if (selectionBox) {
+                    hSlider.value = selectionBox.scale.x;
+                    vSlider.value = selectionBox.scale.y;
+                    xSlider.value = selectionBox.position.x;
+                    ySlider.value = selectionBox.position.y;
+                    zSlider.value = selectionBox.position.z;
+                }
+            });
+
             transformControls.addEventListener('dragging-changed', (event) => {
                 if(window.Viewer.controls) window.Viewer.controls.enabled = !event.value;
             });
@@ -170,9 +193,8 @@
         }
         if(transformControls) transformControls.detach();
         
-        // --- MODIFICATION: Hide slider and Apply button on close ---
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
-        sliderGroup.style.display = 'none';
+        toolSettings.style.display = 'none';
 
         if (window.Viewer && window.Viewer.controls) {
             window.Viewer.controls.enabled = true;
@@ -187,25 +209,32 @@
     function showSelectionBox() {
         if (!selectionBox) {
             const { THREE } = window.Phonebook;
+            // --- MODIFICATION: New material for the selection box ---
             const geo = new THREE.BoxGeometry(1, 1, 1);
-            const mat = new THREE.MeshBasicMaterial({ color: 0x00c853, transparent: true, opacity: 0.3, wireframe: true });
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
             selectionBox = new THREE.Mesh(geo, mat);
-
-            const meshBox = new THREE.Box3().setFromObject(originalMesh);
-            selectionBox.position.copy(meshBox.getCenter(new THREE.Vector3()));
-            const size = meshBox.getSize(new THREE.Vector3());
-            // Start with a sensible default size
-            selectionBox.scale.set(size.x * 0.5, size.y * 0.5, size.z * 0.5);
             window.Viewer.scene.add(selectionBox);
         }
         
+        // Center the box on the mesh and reset its local position
+        const meshBox = new window.Phonebook.THREE.Box3().setFromObject(originalMesh);
+        selectionBox.position.copy(meshBox.getCenter(new window.Phonebook.THREE.Vector3()));
+        selectionBox.scale.set(1,1,1); // Start with a default scale
+        
+        // This moves the box to the mesh center, so its local transforms should be reset
+        selectionBox.translateX(0); selectionBox.translateY(0); selectionBox.translateZ(0);
+        
         transformControls.attach(selectionBox);
         
-        // --- MODIFICATION: Show sliders and sync their values ---
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
-        sliderGroup.style.display = 'flex';
+        toolSettings.style.display = 'flex';
+
+        // --- MODIFICATION: Sync all sliders to the box's initial state ---
         hSlider.value = selectionBox.scale.x;
         vSlider.value = selectionBox.scale.y;
+        xSlider.value = 0;
+        ySlider.value = 0;
+        zSlider.value = 0;
     }
 
     function applyBoxErase() {
@@ -239,18 +268,14 @@
         }
 
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'none';
-        sliderGroup.style.display = 'none'; // --- MODIFICATION: Hide sliders after applying
+        toolSettings.style.display = 'none';
         transformControls.detach();
     }
 
     function deleteFaces(faceIndices) {
         const oldGeo = originalMesh.geometry;
-        if (!oldGeo.index) {
-            console.warn("Delete faces is only supported for indexed geometry.");
-            return;
-        }
+        if (!oldGeo.index) { return; }
         const facesToDelete = new Set(faceIndices);
-
         const oldIndices = oldGeo.index.array;
         const newIndices = [];
 
@@ -274,9 +299,7 @@
     function bootstrap() {
         if (window.MeshEditor) return;
         injectUI();
-        window.MeshEditor = {
-            open,
-        };
+        window.MeshEditor = { open };
         window.Debug?.log('In-Viewer Mesh Editor module ready.');
     }
 
