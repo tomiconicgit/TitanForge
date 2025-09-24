@@ -44,21 +44,32 @@
                 for(let k = 0; k < maxInfluences; k++) {
                     const boneInfo = boneDistances[k];
                     if (!boneInfo) continue;
-                    const weight = 1.0 / (boneInfo.distance ** 2 + 0.0001);
+                    // Using squared distance gives a nicer falloff
+                    const weight = 1.0 / (boneInfo.distance ** 2 + 0.0001); 
                     influences.push({ index: boneInfo.index, weight });
                     totalWeight += weight;
                 }
 
                 if (totalWeight > 0) {
-                    for (let k = 0; k < maxInfluences; k++) {
-                        const influence = influences[k];
-                        skinIndex.setX(i * maxInfluences + k, influence ? influence.index : 0);
-                        skinWeight.setX(i * maxInfluences + k, influence ? influence.weight / totalWeight : 0);
-                    }
+                    // THIS IS THE CORRECTED PART:
+                    // We use setXYZW to write the four values for each vertex.
+                    const normalized_influences = influences.map(inf => inf.weight / totalWeight);
+                    
+                    skinIndex.setX(i, influences[0] ? influences[0].index : 0);
+                    skinWeight.setX(i, normalized_influences[0] ? normalized_influences[0] : 0);
+
+                    skinIndex.setY(i, influences[1] ? influences[1].index : 0);
+                    skinWeight.setY(i, normalized_influences[1] ? normalized_influences[1] : 0);
+
+                    skinIndex.setZ(i, influences[2] ? influences[2].index : 0);
+                    skinWeight.setZ(i, normalized_influences[2] ? normalized_influences[2] : 0);
+
+                    skinIndex.setW(i, influences[3] ? influences[3].index : 0);
+                    skinWeight.setW(i, normalized_influences[3] ? normalized_influences[3] : 0);
                 }
 
                 if (i > 0 && i % 750 === 0) {
-                    const percent = (i / vertexCount) * 100;
+                    const percent = Math.round((i / vertexCount) * 100);
                     await new Promise(resolve => setTimeout(resolve, 0));
                     await onProgress(percent, `Processing vertex ${i.toLocaleString()} / ${vertexCount.toLocaleString()}`);
                 }
@@ -70,21 +81,18 @@
             const newSkinnedMesh = new THREE.SkinnedMesh(geometry, sourceMesh.material);
             newSkinnedMesh.name = sourceMesh.name;
 
-            // THIS IS THE KEY FIX FOR POSITIONING:
-            // Decompose the original mesh's world matrix into the new mesh's local transform.
             sourceMesh.matrixWorld.decompose(newSkinnedMesh.position, newSkinnedMesh.quaternion, newSkinnedMesh.scale);
             
             window.Viewer.scene.add(newSkinnedMesh);
             newSkinnedMesh.bind(skeleton);
-            
-            // Mark the old mesh for removal
+
             meshesToRemove.push(sourceMesh);
         }
         
-        // Clean up old meshes outside the loop
         meshesToRemove.forEach(mesh => {
             if (mesh.parent) {
                 mesh.parent.remove(mesh);
             }
         });
     }
+
