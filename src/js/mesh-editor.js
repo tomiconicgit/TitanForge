@@ -8,7 +8,6 @@
     let originalGeometry = null;
     let activeAssetId = null;
     
-    // --- MODIFICATION: Added references for new UI elements ---
     let toolbar, transformControls, selectionBox;
     let toolSettings, hSlider, vSlider, xSlider, ySlider, zSlider;
     let isEditing = false;
@@ -16,6 +15,7 @@
     // --- UI Injection ---
     function injectUI() {
         const style = document.createElement('style');
+        // --- MODIFICATION: Updated CSS for a two-row slider layout ---
         style.textContent = `
             #tf-mesh-editor-toolbar {
                 position: fixed;
@@ -30,7 +30,6 @@
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
                 display: none;
-                /* --- MODIFICATION: New layout using column flex --- */
                 flex-direction: column;
                 gap: 8px;
             }
@@ -44,8 +43,14 @@
             #editor-tool-settings {
                 flex-grow: 1;
                 display: flex;
+                flex-direction: column; /* Stack slider rows vertically */
+                align-items: center;
+                gap: 5px; /* Space between the two rows of sliders */
+            }
+            .slider-row {
+                display: flex;
                 justify-content: center;
-                gap: 15px;
+                gap: 10px; /* Space between sliders in the same row */
             }
             .tf-editor-btn {
                 padding: 8px 16px; font-size: 14px; font-weight: 600;
@@ -57,7 +62,7 @@
             .slider-control { display: flex; align-items: center; gap: 5px; }
             .slider-control label { color: #a0a7b0; font-size: 12px; font-weight: bold; width: 15px; text-align: center; }
             #tf-mesh-editor-toolbar input[type=range] {
-                width: 80px;
+                width: 70px;
                 -webkit-appearance: none;
                 height: 4px;
                 background: rgba(0,0,0,0.3);
@@ -77,30 +82,34 @@
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
-        // --- MODIFICATION: New HTML structure for rows and all sliders ---
+        // --- MODIFICATION: New HTML structure with nested slider-row divs ---
         toolbar.innerHTML = `
             <div class="editor-toolbar-row">
                  <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Show Erase Box</button>
                  <div id="editor-tool-settings" style="display:none;">
-                    <div class="slider-control">
-                        <label>H</label>
-                        <input type="range" id="editor-scale-h" min="0.01" max="5" step="0.01" value="1" title="Horizontal Size">
+                    <div class="slider-row">
+                        <div class="slider-control">
+                            <label for="editor-scale-h">H</label>
+                            <input type="range" id="editor-scale-h" min="0.01" max="3" step="0.01" value="1" title="Horizontal Size">
+                        </div>
+                        <div class="slider-control">
+                            <label for="editor-scale-v">V</label>
+                            <input type="range" id="editor-scale-v" min="0.01" max="3" step="0.01" value="1" title="Vertical Size">
+                        </div>
                     </div>
-                    <div class="slider-control">
-                        <label>V</label>
-                        <input type="range" id="editor-scale-v" min="0.01" max="5" step="0.01" value="1" title="Vertical Size">
-                    </div>
-                    <div class="slider-control">
-                        <label>X</label>
-                        <input type="range" id="editor-pos-x" min="-5" max="5" step="0.01" value="0" title="Left/Right Position">
-                    </div>
-                    <div class="slider-control">
-                        <label>Y</label>
-                        <input type="range" id="editor-pos-y" min="-5" max="5" step="0.01" value="0" title="Up/Down Position">
-                    </div>
-                    <div class="slider-control">
-                        <label>Z</label>
-                        <input type="range" id="editor-pos-z" min="-5" max="5" step="0.01" value="0" title="Forward/Back Position">
+                    <div class="slider-row">
+                        <div class="slider-control">
+                            <label for="editor-pos-x">X</label>
+                            <input type="range" id="editor-pos-x" min="-5" max="5" step="0.01" value="0" title="Left/Right Position">
+                        </div>
+                        <div class="slider-control">
+                            <label for="editor-pos-y">Y</label>
+                            <input type="range" id="editor-pos-y" min="-5" max="5" step="0.01" value="0" title="Up/Down Position">
+                        </div>
+                        <div class="slider-control">
+                            <label for="editor-pos-z">Z</label>
+                            <input type="range" id="editor-pos-z" min="-5" max="5" step="0.01" value="0" title="Forward/Back Position">
+                        </div>
                     </div>
                  </div>
                  <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
@@ -148,7 +157,6 @@
             const { TransformControls } = await import('three/addons/controls/TransformControls.js');
             transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
             
-            // --- MODIFICATION: Sync sliders when gizmo is moved ---
             transformControls.addEventListener('objectChange', () => {
                 if (selectionBox) {
                     hSlider.value = selectionBox.scale.x;
@@ -209,32 +217,30 @@
     function showSelectionBox() {
         if (!selectionBox) {
             const { THREE } = window.Phonebook;
-            // --- MODIFICATION: New material for the selection box ---
             const geo = new THREE.BoxGeometry(1, 1, 1);
             const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
             selectionBox = new THREE.Mesh(geo, mat);
             window.Viewer.scene.add(selectionBox);
         }
         
-        // Center the box on the mesh and reset its local position
         const meshBox = new window.Phonebook.THREE.Box3().setFromObject(originalMesh);
-        selectionBox.position.copy(meshBox.getCenter(new window.Phonebook.THREE.Vector3()));
-        selectionBox.scale.set(1,1,1); // Start with a default scale
+        const center = meshBox.getCenter(new THREE.Vector3());
         
-        // This moves the box to the mesh center, so its local transforms should be reset
-        selectionBox.translateX(0); selectionBox.translateY(0); selectionBox.translateZ(0);
-        
+        // Detach from gizmo to reset position without firing 'objectChange'
+        transformControls.detach();
+        selectionBox.position.copy(center);
+        selectionBox.scale.set(1,1,1);
         transformControls.attach(selectionBox);
         
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
         toolSettings.style.display = 'flex';
 
-        // --- MODIFICATION: Sync all sliders to the box's initial state ---
+        // Sync all sliders to the box's initial state
         hSlider.value = selectionBox.scale.x;
         vSlider.value = selectionBox.scale.y;
-        xSlider.value = 0;
-        ySlider.value = 0;
-        zSlider.value = 0;
+        xSlider.value = selectionBox.position.x;
+        ySlider.value = selectionBox.position.y;
+        zSlider.value = selectionBox.position.z;
     }
 
     function applyBoxErase() {
