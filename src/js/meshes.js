@@ -86,6 +86,8 @@
                 width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
             }
             .tf-mesh-row .icon-btn svg { fill: #a0a7b0; transition: fill 0.2s ease; }
+            /* --- MODIFICATION: Added new hover color for edit button --- */
+            .tf-mesh-row .edit-btn:hover svg { fill: #25e2a0; }
             .tf-mesh-row .rename-btn:hover svg { fill: #fff; }
             .tf-mesh-row .delete-btn:hover svg { fill: #ff5959; }
             .tf-mesh-row .unskin-btn:hover svg { fill: #ffc107; }
@@ -229,12 +231,16 @@
                 const meshName = mesh.name || `Mesh ${index + 1}`;
                 const meshId = `${activeAsset.id}-mesh-${index}`;
 
+                // --- MODIFICATION: Added the new edit button to the actions ---
                 row.innerHTML = `
                     <div class="mesh-details">
                         <input type="checkbox" class="mass-remove-checkbox" title="Select for removal">
                         <span class="name" title="${meshName}">${meshName}</span>
                     </div>
                     <div class="actions">
+                        <button class="icon-btn edit-btn" title="Edit Mesh Geometry">
+                            <svg viewBox="0 0 24 24" width="16" height="16"><path d="M20.71 7.04c.34-.34.34-.92 0-1.26l-2.79-2.79c-.34-.34-.92-.34-1.26 0l-1.37 1.37 4.05 4.05 1.37-1.37zM3 17.25V21h3.75L17.81 9.94l-4.05-4.05L3 17.25z"/></svg>
+                        </button>
                         <button class="icon-btn unskin-btn" title="Remove Rig from Mesh" style="display: none;">
                             <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17 7h-4v2h4c1.65 0 3 1.35 3 3s-1.35 3-3 3h-4v2h4c2.76 0 5-2.24 5-5s-2.24-5-5-5zm-6 8H7c-1.65 0-3-1.35-3-3s1.35-3 3-3h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-2zm-3-4h8v2H8v-2z"></path></svg>
                         </button>
@@ -487,23 +493,31 @@
         });
 
         listContainer.addEventListener('click', (e) => {
-            if (isMassRemoveMode) return; // Disable individual actions in mass remove mode
+            if (isMassRemoveMode) return;
             
             const button = e.target.closest('.icon-btn');
             if (!button || !activeAsset) return;
 
             const row = button.closest('.tf-mesh-row');
             const uuid = row.dataset.meshUuid;
+            const mesh = activeAsset.object.getObjectByProperty('uuid', uuid);
+            if (!mesh) return;
 
-            if (button.classList.contains('unskin-btn')) {
+            // --- MODIFICATION: Handle the new edit button click ---
+            if (button.classList.contains('edit-btn')) {
+                // Check if the MeshEditor is available and open it
+                if (window.MeshEditor && typeof window.MeshEditor.open === 'function') {
+                    window.MeshEditor.open(mesh);
+                } else {
+                    alert('Mesh Editor module not loaded.');
+                }
+            } else if (button.classList.contains('unskin-btn')) {
                 unskinMesh(uuid);
             } else if (button.classList.contains('rename-btn')) {
-                meshToRename = activeAsset.object.getObjectByProperty('uuid', uuid);
-                if (meshToRename) {
-                    renameInput.value = meshToRename.name;
-                    showRenameModal(true);
-                    renameInput.focus();
-                }
+                meshToRename = mesh;
+                renameInput.value = meshToRename.name;
+                showRenameModal(true);
+                renameInput.focus();
             } else if (button.classList.contains('delete-btn')) {
                 removeSingleMesh(uuid);
             }
