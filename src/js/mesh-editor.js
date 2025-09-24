@@ -75,6 +75,7 @@
 
         toolbar = document.createElement('div');
         toolbar.id = 'tf-mesh-editor-toolbar';
+        // --- MODIFICATION: Moved "Apply Box" button to the bottom row ---
         toolbar.innerHTML = `
             <div class="editor-toolbar-row">
                  <button id="editor-box-tool-btn" class="tf-editor-btn tf-editor-btn-secondary">Show Erase Box</button>
@@ -104,11 +105,12 @@
                         </div>
                     </div>
                  </div>
-                 <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
             </div>
             <div class="editor-toolbar-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
                 <button id="editor-cancel-btn" class="tf-editor-btn tf-editor-btn-secondary">Cancel</button>
-                <div style="flex-grow: 1;"></div>
+                <div style="flex-grow: 1; text-align: center;">
+                    <button id="editor-apply-box-btn" class="tf-editor-btn tf-editor-btn-primary" style="display:none;">Apply Box</button>
+                </div>
                 <button id="editor-save-btn" class="tf-editor-btn tf-editor-btn-primary">Apply & Save</button>
             </div>
         `;
@@ -148,6 +150,17 @@
         if (!transformControls) {
             const { TransformControls } = await import('three/addons/controls/TransformControls.js');
             transformControls = new TransformControls(window.Viewer.camera, window.Viewer.renderer.domElement);
+            
+            transformControls.addEventListener('objectChange', () => {
+                if (selectionBox) {
+                    hSlider.value = selectionBox.scale.x;
+                    vSlider.value = selectionBox.scale.y;
+                    xSlider.value = selectionBox.position.x;
+                    ySlider.value = selectionBox.position.y;
+                    zSlider.value = selectionBox.position.z;
+                }
+            });
+
             transformControls.addEventListener('dragging-changed', (event) => {
                 if(window.Viewer.controls) window.Viewer.controls.enabled = !event.value;
             });
@@ -197,38 +210,28 @@
     
     function showSelectionBox() {
         const { THREE } = window.Phonebook;
-
         if (!selectionBoxPivot) {
-            // Create an invisible pivot point
             selectionBoxPivot = new THREE.Group();
             window.Viewer.scene.add(selectionBoxPivot);
             
-            // Create the visible red box
             const geo = new THREE.BoxGeometry(1, 1, 1);
             const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
             selectionBox = new THREE.Mesh(geo, mat);
-            
-            // Add the box to the pivot
             selectionBoxPivot.add(selectionBox);
         }
         
-        // Position the PIVOT at the center of the mesh
         const meshBox = new THREE.Box3().setFromObject(originalMesh);
         const center = meshBox.getCenter(new THREE.Vector3());
-        selectionBoxPivot.position.copy(center);
         
-        // Reset the BOX's local position and scale inside the pivot
+        transformControls.detach();
+        selectionBoxPivot.position.copy(center);
         selectionBox.position.set(0, 0, 0);
         selectionBox.scale.set(1, 1, 1);
-        
-        // Attach the gizmo to the PIVOT for coarse movement
         transformControls.attach(selectionBoxPivot);
         
-        // Show the UI
         toolbar.querySelector('#editor-apply-box-btn').style.display = 'inline-block';
         toolSettings.style.display = 'flex';
 
-        // Sync all sliders to the box's LOCAL state
         hSlider.value = selectionBox.scale.x;
         vSlider.value = selectionBox.scale.y;
         xSlider.value = selectionBox.position.x;
@@ -240,12 +243,11 @@
         if (!selectionBox || !originalMesh) return;
         
         const geometry = originalMesh.geometry;
-        const vertices = geometry.attributes.position;
-        
         const facesToDelete = new Set();
         const boxMatrixInverse = selectionBox.matrixWorld.clone().invert();
         const tempVertex = new window.Phonebook.THREE.Vector3();
 
+        const vertices = geometry.attributes.position;
         for (let i = 0; i < vertices.count; i++) {
             tempVertex.fromBufferAttribute(vertices, i);
             tempVertex.applyMatrix4(originalMesh.matrixWorld);
@@ -271,28 +273,90 @@
         transformControls.detach();
     }
 
+    // --- MODIFICATION: Complete rewrite of deleteFaces to preserve materials and compact geometry ---
     function deleteFaces(faceIndices) {
+        const { THREE } = window.Phonebook;
         const oldGeo = originalMesh.geometry;
-        if (!oldGeo.index) { return; }
         const facesToDelete = new Set(faceIndices);
-        const oldIndices = oldGeo.index.array;
-        const newIndices = [];
 
+        if (!oldGeo.index) {
+            console.warn("Erase tool only supports indexed geometry.");
+            return;
+        }
+
+        // --- Step 1: Identify which vertices to keep ---
+        const oldIndices = oldGeo.index.array;
+        const keptVertexIndices = new Set();
         for (let i = 0; i < oldIndices.length; i += 3) {
-            if (!facesToDelete.has(i / 3)) {
-                newIndices.push(oldIndices[i], oldIndices[i+1], oldIndices[i+2]);
+            const faceIndex = i / 3;
+            if (!facesToDelete.has(faceIndex)) {
+                keptVertexIndices.add(oldIndices[i]);
+                keptVertexIndices.add(oldIndices[i+1]);
+                keptVertexIndices.add(oldIndices[i+2]);
             }
         }
+
+        // --- Step 2: Create new, compacted attribute buffers ---
+        const newGeo = new THREE.BufferGeometry();
+        const oldPositions = oldGeo.attributes.position;
+        const newPositions = new THREE.Float32BufferAttribute(keptVertexIndices.size * 3, 3);
         
-        const newGeo = new window.Phonebook.THREE.BufferGeometry();
-        newGeo.setAttribute('position', oldGeo.attributes.position);
-        if(oldGeo.attributes.normal) newGeo.setAttribute('normal', oldGeo.attributes.normal);
-        if(oldGeo.attributes.uv) newGeo.setAttribute('uv', oldGeo.attributes.uv);
-        newGeo.setIndex(newIndices);
+        const vertexMap = new Map(); // Maps old vertex index to new vertex index
+        let newIndex = 0;
         
+        keptVertexIndices.forEach(oldIndex => {
+            newPositions.setXYZ(newIndex, oldPositions.getX(oldIndex), oldPositions.getY(oldIndex), oldPositions.getZ(oldIndex));
+            vertexMap.set(oldIndex, newIndex);
+            newIndex++;
+        });
+        newGeo.setAttribute('position', newPositions);
+        
+        // Copy other attributes like normals and UVs
+        if (oldGeo.attributes.normal) {
+            const oldNormals = oldGeo.attributes.normal;
+            const newNormals = new THREE.Float32BufferAttribute(keptVertexIndices.size * 3, 3);
+            newIndex = 0;
+            keptVertexIndices.forEach(oldIndex => {
+                newNormals.setXYZ(newIndex, oldNormals.getX(oldIndex), oldNormals.getY(oldIndex), oldNormals.getZ(oldIndex));
+                newIndex++;
+            });
+            newGeo.setAttribute('normal', newNormals);
+        }
+        if (oldGeo.attributes.uv) {
+            const oldUVs = oldGeo.attributes.uv;
+            const newUVs = new THREE.Float32BufferAttribute(keptVertexIndices.size * 2, 2);
+            newIndex = 0;
+            keptVertexIndices.forEach(oldIndex => {
+                newUVs.setXY(newIndex, oldUVs.getX(oldIndex), oldUVs.getY(oldIndex));
+                newIndex++;
+            });
+            newGeo.setAttribute('uv', newUVs);
+        }
+
+        // --- Step 3: Rebuild the index and material groups ---
+        const newIndicesArray = [];
+        oldGeo.groups.forEach(group => {
+            const newGroup = { start: newIndicesArray.length, count: 0, materialIndex: group.materialIndex };
+            for (let i = group.start; i < group.start + group.count; i += 3) {
+                const faceIndex = i / 3;
+                if (!facesToDelete.has(faceIndex)) {
+                    newIndicesArray.push(vertexMap.get(oldIndices[i]));
+                    newIndicesArray.push(vertexMap.get(oldIndices[i+1]));
+                    newIndicesArray.push(vertexMap.get(oldIndices[i+2]));
+                    newGroup.count += 3;
+                }
+            }
+            if (newGroup.count > 0) {
+                newGeo.groups.push(newGroup);
+            }
+        });
+
+        newGeo.setIndex(newIndicesArray);
+        
+        // --- Step 4: Replace the old geometry ---
         originalMesh.geometry.dispose();
         originalMesh.geometry = newGeo;
-        window.Debug?.log(`Erased ${facesToDelete.size} faces.`);
+        window.Debug?.log(`Erased ${facesToDelete.size} faces and rebuilt geometry.`);
     }
 
     function bootstrap() {
