@@ -6,6 +6,7 @@
     // --- Module State ---
     let originalMesh = null; // The mesh from the main scene
     let editMesh = null;     // A clone of the mesh for editing
+    let activeAssetId = null; // The ID of the parent asset
     let modal, renderer, scene, camera, controls, transformControls, selectionBox;
     let eraseMode = false;
     let rafId = null;
@@ -76,7 +77,8 @@
     }
 
     // --- 3D Scene Setup for Modal ---
-    function setupScene() {
+    // MODIFICATION: Added 'async' keyword to the function declaration.
+    async function setupScene() {
         const { THREE } = window.Phonebook;
         const container = document.getElementById('tf-mesh-editor-canvas-container');
 
@@ -124,10 +126,12 @@
     }
 
     // --- Core Editor Logic ---
-    async function open(mesh) {
+    // MODIFICATION: Updated signature to accept assetId.
+    async function open(mesh, assetId) {
         if (!renderer) await setupScene(); // Lazy setup
 
         originalMesh = mesh;
+        activeAssetId = assetId; // MODIFICATION: Store the asset ID.
         
         // IMPORTANT: Work on a clone of the geometry.
         const clonedGeometry = originalMesh.geometry.clone();
@@ -165,13 +169,14 @@
             selectionBox = null;
         }
         originalMesh = null;
+        activeAssetId = null; // MODIFICATION: Clear the asset ID.
         eraseMode = false;
         document.getElementById('editor-erase-toggle').checked = false;
         toggleEraseMode({ target: { checked: false } }); // Reset UI state
     }
 
     function saveChanges() {
-        if (!originalMesh || !editMesh) return;
+        if (!originalMesh || !editMesh || !activeAssetId) return;
 
         // Apply the edited geometry back to the original mesh
         originalMesh.geometry.dispose(); // Dispose the old one
@@ -179,8 +184,8 @@
         originalMesh.geometry.computeBoundingSphere();
         originalMesh.geometry.computeBoundingBox();
 
-        // Notify the app that the asset has changed so stats can be updated
-        App.emit('asset:updated', { id: activeAsset.id }); // Assuming activeAsset is globally accessible or passed
+        // MODIFICATION: Use the stored activeAssetId to emit the update event.
+        App.emit('asset:updated', { id: activeAssetId });
         
         close();
     }
@@ -235,10 +240,7 @@
             tempVertex.applyMatrix4(editMesh.matrixWorld); // To world space
             tempVertex.applyMatrix4(boxMatrixInverse); // To box's local space
 
-            // If vertex is inside the unit cube, it's inside the selection box
             if (Math.abs(tempVertex.x) <= 0.5 && Math.abs(tempVertex.y) <= 0.5 && Math.abs(tempVertex.z) <= 0.5) {
-                // This is a simplified approach: mark any face using this vertex for deletion.
-                // For indexed geometry, we find which faces use this vertex index.
                 if (geometry.index) {
                     for (let j = 0; j < geometry.index.count; j += 3) {
                         if (geometry.index.getX(j) === i || geometry.index.getY(j) === i || geometry.index.getZ(j) === i) {
@@ -263,12 +265,15 @@
     function deleteFaces(faceIndices) {
         const { THREE } = window.Phonebook;
         const oldGeo = editMesh.geometry;
+        if (!oldGeo.index) {
+            console.warn("Delete faces is only supported for indexed geometry.");
+            return;
+        }
         const facesToDelete = new Set(faceIndices);
 
         const oldIndices = oldGeo.index.array;
         const newIndices = [];
 
-        // Create new index buffer, omitting the deleted faces
         for (let i = 0; i < oldIndices.length; i += 3) {
             if (!facesToDelete.has(i / 3)) {
                 newIndices.push(oldIndices[i], oldIndices[i+1], oldIndices[i+2]);
@@ -276,7 +281,7 @@
         }
         
         const newGeo = new THREE.BufferGeometry();
-        newGeo.setAttribute('position', oldGeo.attributes.position); // Re-use attributes
+        newGeo.setAttribute('position', oldGeo.attributes.position);
         if(oldGeo.attributes.normal) newGeo.setAttribute('normal', oldGeo.attributes.normal);
         if(oldGeo.attributes.uv) newGeo.setAttribute('uv', oldGeo.attributes.uv);
         newGeo.setIndex(newIndices);
