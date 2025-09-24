@@ -1,4 +1,4 @@
-// src/main.js â Director/orchestrator for Titan Forge PWA
+// src/main.js — Director/orchestrator for Titan Forge PWA
 // Centralises boot order and shared utilities.
 (() => {
   'use strict';
@@ -72,7 +72,7 @@
           const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
           if (!gl) throw new Error('WebGL not available');
           this.glVersion = gl instanceof WebGL2RenderingContext ? 'webgl2' : 'webgl1';
-          Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} ÃÂ¢ÃÂÃÂ¢ ${this.glVersion}`);
+          Task.log(`Renderer: ${gl.getParameter(gl.RENDERER)} ­— ${this.glVersion}`);
         });
 
         this.addStage('wire:events', 'Wiring global events', async () => {
@@ -105,13 +105,12 @@
         await this.import('meshes', './js/meshes.js');
         await this.import('texture', './js/texture.js');
         
-        // --- CHANGE IS HERE ---
-        // Removed '{ optional: true }' to make the mesh editor a required module.
-        // This will now show an error on the loading screen if the file can't be found.
+        // --- FIX APPLIED ---
+        // This ensures the mesh editor module is always loaded at startup.
         await this.import('mesheditor', './js/mesh-editor.js');
 
 
-        Task.done('director', `OK ÃÂ¢ÃÂÃÂ¢ ${this.glVersion || 'webgl?'}`);
+        Task.done('director', `OK ­— ${this.glVersion || 'webgl?'}`);
         this.emit('app:booted', { version: this.version, gl: this.glVersion });
 
       } catch (e) {
